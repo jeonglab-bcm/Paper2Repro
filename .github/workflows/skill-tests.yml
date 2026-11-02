@@ -31,3 +31,6 @@ jobs:
 
       - name: Regression harness tests (scorer and skill blinding)
         run: python3 tests/skill-regression/test_score.py
+
+      - name: Session log tests
+        run: python3 tests/skill-regression/test_session_log.py

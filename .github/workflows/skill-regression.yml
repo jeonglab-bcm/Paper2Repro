@@ -145,10 +145,19 @@ jobs:
             --transcript "$OUT/transcript.jsonl" --fig2-reference "$OUT/fig2_reference.csv" \
             --report "$OUT/report.md" --json "$OUT/score.json"
 
+      - name: Build the session log (conversation, tool calls, tokens and cost)
+        if: always()
+        run: |
+          python3 "$HARNESS/session_log.py" render "$OUT/transcript.jsonl" --out "$OUT/session" --prompt "$OUT/prompt.md"
+
       - name: Write the report to the job summary
         if: always()
         run: |
           cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No report." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat "$OUT/session/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No session log." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full timeline: open \`out/session/session.html\` in the run artifact." >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.agent.outcome }}" != "success" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "The agent step ended with: ${{ steps.agent.outcome }} (time limit, budget limit or error)." >> "$GITHUB_STEP_SUMMARY"
