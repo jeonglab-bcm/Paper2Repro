@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pymupdf==1.28.2", "pymupdf4llm==1.28.2", "pypdf==6.18.1"]
+# dependencies = ["pymupdf==2.0", "pymupdf4llm==2.0", "pypdf==6.21.4"]
 # ///
 """Local PDF extraction, an editable agent review plan, and minimal paper packages."""
 

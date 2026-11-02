@@ -20,8 +20,8 @@ Use a workflow engine (Nextflow in the worked example) with one process per step
 ## Continuous integration
 
 - Run the pipeline on the paper's architecture. GitHub `ubuntu-24.04` runners are x86_64.
-- Install only what the steps use. For tikzDevice output: `texlive-latex-base`, `texlive-pictures`, `preview-latex-style` and `poppler-utils`. Add R and Python packages, Java and Nextflow.
-- Pin package versions or use a container image. An unpinned plotting package can move text by some pixels.
+- Install only what the steps use. For tikzDevice output: `texlive-latex-base`, `texlive-pictures`, `preview-latex-style` and `poppler-utils`. Add R and Python packages, a current Java LTS and Nextflow.
+- Use the latest stable releases and the latest major version of each CI action. Pin the resolved versions with a lockfile or a container image. An unpinned plotting package can move text by some pixels.
 - Write the check report to the job summary and upload the results as an artifact.
 
 ## Site

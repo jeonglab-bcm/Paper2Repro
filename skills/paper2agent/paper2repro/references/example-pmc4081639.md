@@ -39,4 +39,8 @@ Yu P, Shaw CA. An efficient algorithm for accurate computation of the Dirichlet-
 - Axis-title gaps, title sizes and legend positions (one title gap is negative, which is not a real 0.9.3 setting).
 - Fig. 6 scale constants.
 
-A render with the original 2013 stack (R 3.0, ggplot2 0.9.3, tikzDevice 0.6) would replace most of these fitted values. That run was not done.
+The skill does not install the original 2013 stack (R 3.0, ggplot2 0.9.3, tikzDevice 0.6). Restating more of its defaults from its source can turn fitted values into restated ones.
+
+## Under the current-software rule
+
+This run used the authors' 2014 precompiled library for the mesh values in Figs 4 and 5. The [current-software rule](current-software.md) now treats a binary-only supplement as outdated. Reimplement the mesh method from the paper, and run the library only with the user's approval as a comparison reference.

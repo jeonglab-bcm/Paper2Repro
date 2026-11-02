@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["numpy==2.5.4", "pillow==12.2.0", "scipy==1.18.1"]
+# dependencies = ["numpy==2.5.4", "pillow==13.0.0", "scipy==1.18.1"]
 # ///
 """Align a reproduced figure to the published figure and measure the pixel difference.
 

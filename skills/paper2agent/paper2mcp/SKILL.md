@@ -34,6 +34,7 @@ R and CLI have their own environment and transport instructions. They share sele
 - Run the bound upstream code with traceable inputs before implementation. Preserve native results, relevant figures, metadata, and reproducibility settings for comparison.
 - Keep generated code focused on necessary input checks, upstream calls, and useful output serialization. Expose needed source-supported parameters and test them. Keep benchmark recomputation out of production wrappers.
 - Finish all implementation assignments before launching verifiers. Every verifier must be a fresh agent distinct from every implementer. Verification checks source reuse, code quality, reference agreement, changed inputs, and relevant failures.
+- Use the newest stable runtime and the latest dependency releases that the research code supports, then pin the resolved versions. Keep an older pin only when the latest release fails the repository's tests or examples; record the failure. If the code runs only on an end-of-life runtime (for example, Python 2) or needs an outdated tool, report it and ask the user. Do not rewrite the scientific code to modernize it.
 - Record blocked, merged, deferred, and excluded work with reasons. Never weaken scientific assertions or silently drop a requested tool to report success.
 
 ## Helpers and completion

@@ -1,6 +1,6 @@
 # Runtime requirements
 
-Use isolated project environments, explicit interpreters, and real MCP calls. The R and CLI routes specify their native runtimes and transport. The dependency versions below are a tested baseline; resolve them against each research repository's requirements.
+Use isolated project environments, explicit interpreters, and real MCP calls. The R and CLI routes specify their native runtimes and transport. Install the latest stable releases that each research repository supports; the versions below are the minimums last checked with this skill's helpers.
 
 ## Stage 1: environment and tests
 
@@ -8,12 +8,12 @@ Install the requested repository implementation, verifying the imported module/p
 
 Apply [tool selection and minimal wrappers](tool-selection-and-wrapping.md) to tutorial scanning and the supplementary public-interface/example check. Existing notebooks or Markdown do not exclude Python/R source or tests from inspection. Keep exact user scope and explicit filters; never replace an excluded or unmatched request with unrelated tools. Every selected tool needs an existing implementation and a defensible verification source.
 
-Use `fastmcp==4.0.3` as the tested core API baseline. Resolve it together with the research package's requirements before running tutorials. FastMCP 4 requires newer dependencies, including Pydantic >=2.12; do not silently upgrade incompatible research requirements or bypass the resolver. If the scientific package conflicts, report the conflict and choose a compatible, explicitly recorded FastMCP version only after verifying its API behavior with the same checks.
+Install the latest FastMCP release; `fastmcp==4.1.5` is the release last checked with `verify_mcp_server.py`. Resolve it together with the research package's requirements before running tutorials. FastMCP 4 requires newer dependencies, including Pydantic >=2.12; do not silently upgrade incompatible research requirements or bypass the resolver. If the scientific package conflicts, report the conflict and choose a compatible, explicitly recorded FastMCP version only after verifying its API behavior with the same checks.
 
 Install into the explicit project interpreter:
 
 ```bash
-uv pip install --python "$PROJECT_PYTHON" 'fastmcp==4.0.3' pytest pytest-asyncio
+uv pip install --python "$PROJECT_PYTHON" 'fastmcp>=4.1.5' pytest pytest-asyncio
 uv pip check --python "$PROJECT_PYTHON"
 uv pip freeze --python "$PROJECT_PYTHON" > reports/environment-requirements.txt
 "$PROJECT_PYTHON" --version > reports/python-version.txt
@@ -21,7 +21,7 @@ uv pip freeze --python "$PROJECT_PYTHON" > reports/environment-requirements.txt
 
 For notebook evidence, also install the needed `papermill`, `nbclient`, `ipykernel`, and `jupytext` packages. Include image-comparison packages when the selected scientific checks use them. Refresh the environment snapshot after these additions.
 
-`PROJECT_PYTHON` is the absolute `<project-root>/<github_repo_name>-env/bin/python`. Select the Python version from the scientific repository's requirements, matching its supported Python versions. Record actual resolved dependency versions; do not describe untested combinations as validated. Refresh the snapshot after any dependency changes during execution/testing. Keep this full environment snapshot separate from the runtime-only requirements generated at stage 5.
+`PROJECT_PYTHON` is the absolute `<project-root>/<github_repo_name>-env/bin/python`. Select the newest stable Python version that the scientific repository supports. Record actual resolved dependency versions; do not describe untested combinations as validated. Refresh the snapshot after any dependency changes during execution/testing. Keep this full environment snapshot separate from the runtime-only requirements generated at stage 5.
 
 When writing `pytest.ini`, use `[pytest]`; `[tool:pytest]` belongs to `setup.cfg`. Run tests through the selected interpreter:
 

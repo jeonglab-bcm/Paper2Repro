@@ -2,7 +2,7 @@
 
 Prepare the Python MCP runtime and an isolated R library while the scanner runs. Read the environment and restoration sections of the [R route](../../routes/r.md) and shared [runtime requirements](../../runtime.md).
 
-Bind the package name from `DESCRIPTION`, explicit R/Rscript paths, supported versions, system dependencies, and the pinned scientific source. Create project-owned Python and renv environments; keep packages and caches isolated from user libraries. Restore a supplied lockfile when applicable, install actual dependencies, and snapshot the tested library without changing the scientific checkout's lockfile.
+Bind the package name from `DESCRIPTION`, explicit R/Rscript paths, supported versions, system dependencies, and the pinned scientific source. Create project-owned Python and renv environments; keep packages and caches isolated from user libraries. Install the latest compatible releases of the actual dependencies, restore a supplied lockfile's pin only where the latest release fails the repository's tests or examples (record why), and snapshot the tested library without changing the scientific checkout's lockfile.
 
 Verify Python imports, R package origins, `R.version.string`, `.libPaths()`, subprocess activation, and relevant devices. Notebook evidence additionally needs a project IRkernel using this same R library. Later dependency changes remain your exclusive responsibility.
 
