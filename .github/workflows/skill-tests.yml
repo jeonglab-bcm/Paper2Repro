@@ -1,0 +1,36 @@
+name: Skill tests
+
+# Fast, free checks on every change to the skill or the regression harness.
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "tests/skill-regression/**"
+      - ".github/workflows/skill-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "tests/skill-regression/**"
+      - ".github/workflows/skill-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: compare_figure.py synthetic tests
+        run: uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
+
+      - name: Regression harness tests (scorer and skill blinding)
+        run: python3 tests/skill-regression/test_score.py
+
+      - name: Session log tests
+        run: python3 tests/skill-regression/test_session_log.py
