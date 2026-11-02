@@ -114,6 +114,27 @@ class SessionLogTests(unittest.TestCase):
         self.assertIn("Cost is not available", md)
         self.assertIn("n/a", md)
 
+    def test_several_result_events_use_last_cost_and_sum_turns(self):
+        # A session that waits on background work ends a segment, then resumes. Cost is cumulative.
+        first = dict(RESULT, num_turns=2, duration_ms=1000, total_cost_usd=0.5)
+        bg = {"type": "system", "subtype": "task_started", "tool_use_id": "toolu_bg", "task_type": "local_bash",
+              "description": "nextflow run main.nf"}
+        later = assistant("m9", {"type": "text", "text": "Resumed."}, "2026-11-01T00:01:00.000Z")
+        s = session_log.parse(self.write(EVENTS + [bg, first, later, RESULT]))
+        self.assertEqual(s["meta"]["cost_usd"], 1.25)
+        self.assertEqual(s["meta"]["num_turns"], 5)
+        self.assertEqual(s["meta"]["duration_ms"], 18000)
+        self.assertEqual(s["meta"]["segments"], 2)
+        self.assertFalse(s["meta"]["cost_is_lower_bound"])
+        self.assertEqual(list(s["subagents"]), [AGENT_ID])
+        self.assertEqual(s["meta"]["background_tasks"], 1)
+
+    def test_work_after_last_result_marks_cost_as_lower_bound(self):
+        later = assistant("m9", {"type": "text", "text": "Still working."}, "2026-11-01T00:01:00.000Z")
+        s = session_log.parse(self.write(EVENTS + [RESULT, later]))
+        self.assertTrue(s["meta"]["cost_is_lower_bound"])
+        self.assertIn("$1.25+", session_log.summary_md(s))
+
     def test_empty_thinking_is_skipped(self):
         s = session_log.parse(self.write(EVENTS + [RESULT]))
         self.assertNotIn("thinking", [x["kind"] for x in s["entries"]])

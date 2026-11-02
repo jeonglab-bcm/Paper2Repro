@@ -94,7 +94,9 @@ def check_fig2(s: Score, cfg: dict, result: dict, project: Path, ref_csv: Path |
             if ref_csv and ref_csv.is_file() and ok:
                 ref = [float(r["error"]) for r in read_csv(ref_csv)]
                 same = sum(1 for a, b in zip(err, ref) if a == b)
-                s.info("Fig. 2 values identical to reference", f"{same} of {len(ref)}")
+                tol = cfg["fig2"].get("value_abs_tol", 1e-12)
+                close = sum(1 for a, b in zip(err, ref) if abs(a - b) <= tol)
+                s.info("Fig. 2 values vs reference", f"{same} of {len(ref)} bitwise identical, {close} within {tol:g}")
     render = f2.get("render")
     s.hard("Fig. 2 render", bool(render) and (project / str(render)).is_file(), str(render))
     rep = f2.get("compare_report")
@@ -119,14 +121,20 @@ def check_transcript(s: Score, cfg: dict, transcript: Path | None) -> None:
     text = transcript.read_text(errors="replace")
     hits = sorted({m for m in cfg["transcript_leak_markers"] if m in text})
     s.hard("No access to existing reproduction", not hits, ", ".join(hits) or "no markers in transcript")
+    results = []
     for line in text.splitlines():
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
         if ev.get("type") == "result":
-            s.info("Agent run", f"{ev.get('subtype')}, {ev.get('num_turns')} turns, "
-                   f"{(ev.get('duration_ms') or 0) / 60000:.0f} min, ${ev.get('total_cost_usd') or 0:.2f}")
+            results.append(ev)
+    if results:  # cost is cumulative across result events; turns and durations are per segment
+        s.info("Agent run", f"{results[-1].get('subtype')}, {sum(r.get('num_turns') or 0 for r in results)} turns, "
+               f"{sum(r.get('duration_ms') or 0 for r in results) / 60000:.0f} min, "
+               f"${results[-1].get('total_cost_usd') or 0:.2f}")
+    else:
+        s.info("Agent run", "no result event (cut off)")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -133,7 +133,7 @@ class ScoreTests(unittest.TestCase):
         ref.write_text("\n".join(lines) + "\n")
         code, checks = run(p, ref=ref)
         self.assertEqual(code, 0)
-        self.assertEqual(checks["Fig. 2 values identical to reference"]["detail"], "299 of 300")
+        self.assertEqual(checks["Fig. 2 values vs reference"]["detail"], "299 of 300 bitwise identical, 299 within 1e-12")
 
 
 class BlindTests(unittest.TestCase):

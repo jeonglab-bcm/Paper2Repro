@@ -72,7 +72,8 @@ def parse(path: Path, prompt: str | None = None) -> dict:
     open_calls: dict[str, dict] = {}
     msg_usage: dict[str, dict] = {}
     subagents: dict[str, dict] = {}
-    result = None
+    results: list[dict] = []
+    after_last_result = False  # assistant output after the last result event: the run was cut off
     stamps = []
 
     if prompt:
@@ -89,13 +90,15 @@ def parse(path: Path, prompt: str | None = None) -> dict:
             meta["tool_count"] = len(e.get("tools") or [])
         elif t == "system" and sub == "task_started":
             subagents.setdefault(e.get("tool_use_id"), {}).update(
-                type=e.get("subagent_type"), description=e.get("description"), status="running")
+                type=e.get("subagent_type") or e.get("task_type"), description=e.get("description"), status="running",
+                background=e.get("task_type") == "local_bash")
         elif t == "system" and sub == "task_notification":
             u = e.get("usage") or {}
             subagents.setdefault(e.get("tool_use_id"), {}).update(
                 status=e.get("status"), tokens=u.get("total_tokens"), tool_uses=u.get("tool_uses"),
                 duration_ms=u.get("duration_ms"))
         elif t == "assistant":
+            after_last_result = True
             m = e.get("message") or {}
             mid, u = m.get("id"), m.get("usage") or {}
             if mid:
@@ -129,7 +132,8 @@ def parse(path: Path, prompt: str | None = None) -> dict:
                 elif c.get("type") == "text" and agent and c.get("text"):
                     entries.append({"kind": "subagent_prompt", "agent": agent, "ts": ts, "text": _clip(c["text"])})
         elif t == "result":
-            result = e
+            results.append(e)
+            after_last_result = False
 
     for entry in open_calls.values():
         entry["is_error"] = None  # no result: the run stopped while the call was open
@@ -143,16 +147,26 @@ def parse(path: Path, prompt: str | None = None) -> dict:
             s["unfinished"] += x["output"] is None
             s["seconds"] += (x["duration_ms"] or 0) / 1000
 
-    if result:
+    background = {k: v for k, v in subagents.items() if v.get("background")}
+    subagents = {k: v for k, v in subagents.items() if not v.get("background")}
+    meta["background_tasks"] = len(background)
+
+    if results:
+        # A session that waits on background work ends with several result events. Cost and
+        # modelUsage are cumulative, so take the last one; turns and durations are per segment.
+        result = results[-1]
         usage_source = "final"
         models = {name: {"input": u.get("inputTokens", 0), "output": u.get("outputTokens", 0),
                          "cache_read": u.get("cacheReadInputTokens", 0), "cache_write": u.get("cacheCreationInputTokens", 0),
                          "cost_usd": u.get("costUSD")} for name, u in (result.get("modelUsage") or {}).items()}
-        meta.update({"status": result.get("subtype"), "is_error": result.get("is_error"),
-                     "num_turns": result.get("num_turns"), "duration_ms": result.get("duration_ms"),
+        meta.update({"status": result.get("subtype") if not after_last_result else "cut off after last result",
+                     "is_error": result.get("is_error"), "segments": len(results),
+                     "cost_is_lower_bound": after_last_result,
+                     "num_turns": sum(r.get("num_turns") or 0 for r in results),
+                     "duration_ms": sum(r.get("duration_ms") or 0 for r in results),
                      "cost_usd": result.get("total_cost_usd"), "stop_reason": result.get("terminal_reason") or result.get("stop_reason"),
-                     "permission_denials": len(result.get("permission_denials") or []),
-                     "subagents_spawned": (result.get("subagent_stats") or {}).get("spawned")})
+                     "permission_denials": sum(len(r.get("permission_denials") or []) for r in results),
+                     "subagents_spawned": len(subagents)})
     else:
         usage_source = "partial"
         models = defaultdict(lambda: {k: 0 for k in TOKEN_FIELDS} | {"cost_usd": None})
@@ -174,6 +188,7 @@ def parse(path: Path, prompt: str | None = None) -> dict:
     totals = {k: sum(m.get(k) or 0 for m in models.values()) for k in TOKEN_FIELDS}
     return {"meta": meta, "usage_source": usage_source, "models": models, "totals": totals,
             "tools": dict(sorted(tools.items(), key=lambda kv: -kv[1]["calls"])), "subagents": subagents,
+            "background": background,
             "usage_by_agent": dict(by_agent), "entries": entries}
 
 
@@ -197,10 +212,14 @@ def summary_md(s: dict) -> str:
     calls = sum(x["calls"] for x in s["tools"].values())
     errors = sum(x["errors"] for x in s["tools"].values())
     out = ["## Session summary", "",
-           "| Status | Model | Duration | Turns | Tool calls | Tool errors | Subagents | Cost |",
-           "| --- | --- | --- | --- | --- | --- | --- | --- |",
+           "| Status | Model | Duration | Turns | Tool calls | Tool errors | Subagents | Background tasks | Cost |",
+           "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
            f"| {m.get('status')} | {m.get('model') or '-'} | {_dur(m.get('duration_ms'))} | {_n(m.get('num_turns'))} "
-           f"| {calls:,} | {errors:,} | {_n(m.get('subagents_spawned'))} | {_usd(m.get('cost_usd'))} |", ""]
+           f"| {calls:,} | {errors:,} | {_n(m.get('subagents_spawned'))} | {_n(m.get('background_tasks'))} "
+           f"| {_usd(m.get('cost_usd'))}{'+' if m.get('cost_is_lower_bound') else ''} |", ""]
+    if m.get("cost_is_lower_bound"):
+        out += ["> The run kept working after Claude Code's last totals and was then cut off. Cost and tokens "
+                "are lower bounds.", ""]
     if s["usage_source"] == "partial":
         out += ["> The run stopped before Claude Code wrote its final totals. Token counts below come from the "
                 "stream and undercount output tokens. Cost is not available.", ""]
@@ -287,7 +306,7 @@ const dur=ms=>{if(typeof ms!=='number')return'-';const s=Math.round(ms/1000);ret
 const el=(t,a={},...c)=>{const e=document.createElement(t);Object.assign(e,a);e.append(...c);return e};
 const tools=Object.values(S.tools),calls=tools.reduce((a,b)=>a+b.calls,0),errs=tools.reduce((a,b)=>a+b.errors,0);
 document.getElementById('sub').textContent=[M.model,M.claude_code_version&&'Claude Code '+M.claude_code_version,M.session_id].filter(Boolean).join(' · ');
-for(const [l,v] of [['Status',M.status],['Cost',usd(M.cost_usd)],['Duration',dur(M.duration_ms)],['Turns',n(M.num_turns)],['Tool calls',n(calls)],['Tool errors',n(errs)],['Subagents',n(M.subagents_spawned)],['Output tokens',n(T.output)]])
+for(const [l,v] of [['Status',M.status],['Cost',usd(M.cost_usd)+(M.cost_is_lower_bound?'+':'')],['Duration',dur(M.duration_ms)],['Turns',n(M.num_turns)],['Tool calls',n(calls)],['Tool errors',n(errs)],['Subagents',n(M.subagents_spawned)],['Background tasks',n(M.background_tasks)],['Output tokens',n(T.output)]])
  document.getElementById('tiles').append(el('div',{className:'tile'},el('b',{textContent:v??'-'}),el('span',{textContent:l})));
 if(S.usage_source==='partial')document.getElementById('note').append(el('p',{className:'note',textContent:'The run stopped before Claude Code wrote its final totals. Token counts come from the stream and undercount output tokens. Cost is not available.'}));
 const table=(id,head,rows)=>{const t=document.getElementById(id);t.append(el('tr',{},...head.map(([h,r])=>el('th',{textContent:h,className:r?'r':''}))));for(const row of rows)t.append(el('tr',{},...row.map((v,i)=>el('td',{textContent:v,className:head[i][1]?'r':''}))))};

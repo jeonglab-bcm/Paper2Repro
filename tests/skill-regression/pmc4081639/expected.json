@@ -18,6 +18,7 @@
   "fig2": {
     "grid": {"from": 1e-11, "to": 1e-10, "n": 300},
     "grid_rel_tol": 1e-9,
+    "value_abs_tol": 1e-12,
     "reference_csv_url": "https://raw.githubusercontent.com/jeonglab-bcm/fossil/efb994b841023b5a0cad4d904c8a14776fd9eb93/PMC4081639/figure-reproduction/pipeline/fig2_data.csv"
   },
   "transcript_leak_markers": [
