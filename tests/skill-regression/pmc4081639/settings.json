@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "WebFetch(domain:jeonglab-bcm.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git clone:*)",
+      "Bash(gh:*)"
+    ]
+  }
+}

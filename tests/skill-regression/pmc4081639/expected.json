@@ -1,0 +1,47 @@
+{
+  "case": "pmc4081639",
+  "citation": "Yu P, Shaw CA. An efficient algorithm for accurate computation of the Dirichlet-multinomial log-likelihood function. Bioinformatics 30(11):1547-1554 (2014). doi:10.1093/bioinformatics/btu079",
+  "inputs": {
+    "paper": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4081639/",
+    "data": "https://cran.r-project.org/src/contrib/Archive/HMP/HMP_2.0.1.tar.gz"
+  },
+  "table1": {
+    "precision": 5,
+    "rel_tol_vs_reference": 0.001,
+    "sites": {
+      "saliva": {"paper": 0.00389, "reference": 0.003891571021087524},
+      "throat": {"paper": 0.00639, "reference": 0.006394303088154767},
+      "tongue": {"paper": 0.00802, "reference": 0.008015723832130617},
+      "tonsils": {"paper": 0.01039, "reference": 0.010387708082170183}
+    }
+  },
+  "fig2": {
+    "grid": {"from": 1e-11, "to": 1e-10, "n": 300},
+    "grid_rel_tol": 1e-9,
+    "reference_csv_url": "https://raw.githubusercontent.com/jeonglab-bcm/fossil/efb994b841023b5a0cad4d904c8a14776fd9eb93/PMC4081639/figure-reproduction/pipeline/fig2_data.csv"
+  },
+  "transcript_leak_markers": [
+    "jeonglab-bcm/fossil",
+    "jeonglab-bcm.github.io/fossil",
+    "fossil/PMC4081639"
+  ],
+  "skill_redact_markers": [
+    "4081639",
+    "fossil",
+    "btu079",
+    "1e-11",
+    "1e-10",
+    "4.73e-4",
+    "3.82e-4",
+    "221 of 300",
+    "emulation at 300",
+    "0.00389",
+    "0.00639",
+    "0.00802",
+    "0.01039",
+    "0.003892",
+    "0.006394",
+    "0.008016",
+    "0.010388"
+  ]
+}
