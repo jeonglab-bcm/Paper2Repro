@@ -29,6 +29,12 @@ jobs:
       - name: compare_figure.py synthetic tests
         run: uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
 
+      - name: Paper2Skill bundle tests
+        run: uv run skills/paper2agent/paper2skill/scripts/test_paper_bundle.py
+
+      - name: Skill checksum tests
+        run: python3 skills/paper2agent/scripts/test_skill_checksum.py
+
       - name: Regression harness tests (scorer and skill blinding)
         run: python3 tests/skill-regression/test_score.py
 

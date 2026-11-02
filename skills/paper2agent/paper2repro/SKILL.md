@@ -14,6 +14,7 @@ Rebuild what a paper computes, draw it with the paper's own tools, and measure h
 3. Read the paper's copyright line and every data license before you plan the output. See [publishing](references/publishing.md).
 4. List every figure and table. Mark each one as computable, diagram or data display, and record the inputs it needs. Report the ones you do not reproduce.
 5. List the software that the paper used. Mark each tool as current or outdated. See [current software](references/current-software.md).
+6. Record the skill version: run `python3 ../scripts/skill_checksum.py` from this skill directory and save its output as `<project>/<paper-id>/reproduction/skill-version.json`.
 
 ## Workflow
 
@@ -40,6 +41,7 @@ Rebuild what a paper computes, draw it with the paper's own tools, and measure h
 
 - [compare_figure.py](scripts/compare_figure.py) finds the plot panel in both images, aligns the reproduction to the published frame, and writes `aligned.png`, a red/cyan `overlay.png`, `diff.png` and `report.json`. The report gives the shift, the panel-size difference, mean grey difference, ink chamfer distances inside and outside the panel, and per-region offsets. It warns when a region offset reaches the search window or the panel sizes differ.
 - [test_compare_figure.py](scripts/test_compare_figure.py) runs synthetic checks: `uv run scripts/test_compare_figure.py`.
+- [skill_checksum.py](../scripts/skill_checksum.py) prints the skill checksum: the SHA-256 of every file path and content in the installed skill. Equal checksums mean the same skill version.
 
 ```bash
 uv run /path/to/scripts/compare_figure.py --published figure-4.jpg --render fig4.png \
@@ -56,6 +58,7 @@ uv run /path/to/scripts/compare_figure.py --published figure-4.jpg --render fig4
 │   └── reproduction/
 │       ├── main.nf
 │       ├── nextflow.config
+│       ├── skill-version.json # output of skill_checksum.py
 │       ├── pipeline/          # scripts, committed inputs, params/, lockfiles
 │       ├── published/         # only the figures used for comparison
 │       └── output/            # renders: PDF, source, aligned PNG, fit summary
@@ -63,6 +66,6 @@ uv run /path/to/scripts/compare_figure.py --published figure-4.jpg --render fig4
 └── .github/workflows/         # reproduce.yml, pages.yml
 ```
 
-Lead the final response with a results table (item, status, evidence). Then give the pipeline and CI status, the site URL, items not reproduced and why, fitted parameters, replaced software with versions, and licensing exclusions.
+Put the skill checksum in the paper README, the check report and every result file that you write. Lead the final response with a results table (item, status, evidence). Then give the pipeline and CI status, the site URL, items not reproduced and why, fitted parameters, replaced software with versions, licensing exclusions and the skill checksum.
 
 For a complete case, read the [PMC4081639 worked example](references/example-pmc4081639.md).

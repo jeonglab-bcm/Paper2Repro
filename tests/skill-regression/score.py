@@ -9,11 +9,17 @@ Hard checks (any failure exits 1):
   - The transcript shows no access to the existing reproduction.
 
 Reported only: Fig. 2 points identical to the reference series, the agent's
-compare_figure.py metrics, cost, turns and duration.
+compare_figure.py metrics, the skill version (commit and checksum) and whether
+result.json names the installed skill's checksum, cost, turns and duration.
 
 Usage: python3 score.py --case <case dir> --project <project dir>
                         [--transcript run.jsonl] [--fig2-reference ref.csv]
+                        [--skill-version skill-version.json]
                         [--report report.md] [--json score.json]
+
+skill-version.json is written by the workflow before the agent runs:
+{"commit": <git sha>, "source": <skill_checksum.py output for the checkout>,
+ "installed": <skill_checksum.py output for the blinded copy the agent uses>}
 """
 
 from __future__ import annotations
@@ -112,6 +118,26 @@ def check_fig2(s: Score, cfg: dict, result: dict, project: Path, ref_csv: Path |
         s.info("Fig. 2 compare_figure report", "not provided")
 
 
+def check_skill(s: Score, result: dict, version: dict | None) -> dict:
+    """Record which skill version ran and compare it with the checksum in result.json."""
+    installed = ((version or {}).get("installed") or {}).get("checksum")
+    record = {"commit": (version or {}).get("commit"), "installed_checksum": installed,
+              "source_checksum": ((version or {}).get("source") or {}).get("checksum")}
+    if version:
+        s.info("Skill version", f"commit {str(record['commit'])[:12]}, installed {installed}, "
+               f"source {record['source_checksum']}")
+    reported = (result.get("skill") or {}).get("checksum") if isinstance(result.get("skill"), dict) else None
+    record["result_checksum"] = reported
+    if not reported:
+        s.info("Skill checksum in result.json", "not provided")
+    elif installed:
+        s.info("Skill checksum in result.json", "matches the installed skill" if reported == installed
+               else f"{reported} differs from the installed skill")
+    else:
+        s.info("Skill checksum in result.json", str(reported))
+    return record
+
+
 def check_transcript(s: Score, cfg: dict, transcript: Path | None) -> None:
     if not transcript:
         return
@@ -143,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", type=Path, required=True)
     ap.add_argument("--transcript", type=Path)
     ap.add_argument("--fig2-reference", type=Path)
+    ap.add_argument("--skill-version", type=Path, help="skill-version.json written by the workflow")
     ap.add_argument("--report", type=Path)
     ap.add_argument("--json", type=Path)
     a = ap.parse_args(argv)
@@ -160,6 +187,13 @@ def main(argv: list[str] | None = None) -> int:
         check_fig2(s, cfg, result, a.project, a.fig2_reference)
         cmd = (result.get("pipeline") or {}).get("command")
         s.info("Pipeline command", f"`{cmd}`" if cmd else "not provided")
+    version = None
+    if a.skill_version:
+        try:
+            version = json.loads(a.skill_version.read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            s.info("Skill version", f"unreadable: {e.__class__.__name__}")
+    skill = check_skill(s, result, version)
     check_transcript(s, cfg, a.transcript)
 
     md = s.markdown(cfg["case"])
@@ -167,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.report:
         a.report.write_text(md)
     if a.json:
-        a.json.write_text(json.dumps({"case": cfg["case"], "passed": not s.failed,
+        a.json.write_text(json.dumps({"case": cfg["case"], "passed": not s.failed, "skill": skill,
                                       "checks": [dict(zip(("check", "detail", "status"), r)) for r in s.rows]}, indent=1))
     return 1 if s.failed else 0
 

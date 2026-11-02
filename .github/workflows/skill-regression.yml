@@ -65,8 +65,15 @@ jobs:
         run: |
           mkdir -p "$OUT" "$PROJECT" ~/.claude/skills
           cp -R tests/skill-regression "$HARNESS"
+          source=$(python3 skills/paper2agent/scripts/skill_checksum.py)
           python3 tests/skill-regression/blind_skill.py skills/paper2agent ~/.claude/skills/paper2agent \
             "$HARNESS/$CASE/expected.json"
+          # Record the skill version before the agent runs: the commit, the checksum of the
+          # checkout and the checksum of the blinded copy that the agent reads.
+          installed=$(python3 ~/.claude/skills/paper2agent/scripts/skill_checksum.py)
+          printf '{"commit": "%s", "source": %s, "installed": %s}\n' \
+            "$(git rev-parse HEAD)" "$source" "$installed" > "$OUT/skill-version.json"
+          cat "$OUT/skill-version.json"
           # The checkout contains the unredacted worked example. Remove it so the agent cannot read it.
           cd "$RUNNER_TEMP"
           find "$GITHUB_WORKSPACE" -mindepth 1 -delete
@@ -143,6 +150,7 @@ jobs:
         run: |
           python3 "$HARNESS/score.py" --case "$HARNESS/$CASE" --project "$PROJECT" \
             --transcript "$OUT/transcript.jsonl" --fig2-reference "$OUT/fig2_reference.csv" \
+            --skill-version "$OUT/skill-version.json" \
             --report "$OUT/report.md" --json "$OUT/score.json"
 
       - name: Build the session log (conversation, tool calls, tokens and cost)

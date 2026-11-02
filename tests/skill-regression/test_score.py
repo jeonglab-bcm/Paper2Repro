@@ -32,7 +32,7 @@ def grid(frm=1e-11, to=1e-10, n=300):
     return [frm + i * by for i in range(n)]
 
 
-def make_project(root: Path, *, psi=None, xs=None, render=True, result=True) -> Path:
+def make_project(root: Path, *, psi=None, xs=None, render=True, result=True, skill=None) -> Path:
     p = root / "project"
     p.mkdir()
     xs = grid() if xs is None else xs
@@ -45,13 +45,17 @@ def make_project(root: Path, *, psi=None, xs=None, render=True, result=True) -> 
             "table1": {k: {"psi": v} for k, v in psi.items()},
             "fig2": {"data_csv": "fig2.csv", "render": "fig2.png", "compare_report": None},
             "pipeline": {"command": "nextflow run main.nf"},
+            **({"skill": {"checksum": skill}} if skill else {}),
         }))
     return p
 
 
-def run(project: Path, transcript: Path | None = None, ref: Path | None = None) -> tuple[int, dict]:
+def run(project: Path, transcript: Path | None = None, ref: Path | None = None,
+        version: Path | None = None, full: bool = False) -> tuple[int, dict]:
     out = project.parent / "score.json"
     args = ["--case", str(CASE), "--project", str(project), "--json", str(out)]
+    if version:
+        args += ["--skill-version", str(version)]
     if transcript:
         args += ["--transcript", str(transcript)]
     if ref:
@@ -59,7 +63,7 @@ def run(project: Path, transcript: Path | None = None, ref: Path | None = None) 
     with contextlib.redirect_stdout(io.StringIO()):
         code = score.main(args)
     data = json.loads(out.read_text())
-    return code, {c["check"]: c for c in data["checks"]}
+    return code, (data if full else {c["check"]: c for c in data["checks"]})
 
 
 class ScoreTests(unittest.TestCase):
@@ -134,6 +138,42 @@ class ScoreTests(unittest.TestCase):
         code, checks = run(p, ref=ref)
         self.assertEqual(code, 0)
         self.assertEqual(checks["Fig. 2 values vs reference"]["detail"], "299 of 300 bitwise identical, 299 within 1e-12")
+
+    def write_version(self, installed="sha256:" + "a" * 64) -> Path:
+        v = self.root / "skill-version.json"
+        v.write_text(json.dumps({"commit": "0123456789abcdef", "source": {"checksum": "sha256:" + "b" * 64},
+                                 "installed": {"checksum": installed}}))
+        return v
+
+    def test_skill_checksum_matches_installed_skill(self):
+        code, data = run(make_project(self.root, skill="sha256:" + "a" * 64), version=self.write_version(), full=True)
+        self.assertEqual(code, 0)
+        checks = {c["check"]: c for c in data["checks"]}
+        self.assertEqual(checks["Skill checksum in result.json"]["detail"], "matches the installed skill")
+        self.assertIn("commit 0123456789ab", checks["Skill version"]["detail"])
+        self.assertEqual(data["skill"], {"commit": "0123456789abcdef", "installed_checksum": "sha256:" + "a" * 64,
+                                         "source_checksum": "sha256:" + "b" * 64,
+                                         "result_checksum": "sha256:" + "a" * 64})
+
+    def test_skill_checksum_mismatch_or_missing_is_reported_not_failed(self):
+        code, checks = run(make_project(self.root, skill="sha256:" + "c" * 64), version=self.write_version())
+        self.assertEqual(code, 0)
+        self.assertIn("differs from the installed skill", checks["Skill checksum in result.json"]["detail"])
+        self.assertEqual(checks["Skill checksum in result.json"]["status"], "info")
+        (self.root / "project" / "result.json").unlink()
+        (self.root / "project").rename(self.root / "old")
+        code, checks = run(make_project(self.root), version=self.write_version())
+        self.assertEqual(checks["Skill checksum in result.json"]["detail"], "not provided")
+
+    def test_blinded_install_checksum_is_stable(self):
+        sys.path.insert(0, str(SKILL / "scripts"))
+        import skill_checksum
+        with tempfile.TemporaryDirectory() as d:
+            a, b = Path(d) / "a", Path(d) / "b"
+            for dest in (a, b):
+                blind_skill.blind(SKILL, dest, CFG["skill_redact_markers"], f"example-{CFG['case']}*.md")
+            self.assertEqual(skill_checksum.checksum(a), skill_checksum.checksum(b))
+            self.assertNotEqual(skill_checksum.checksum(a)["checksum"], skill_checksum.checksum(SKILL)["checksum"])
 
 
 class BlindTests(unittest.TestCase):

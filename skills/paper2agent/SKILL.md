@@ -14,6 +14,8 @@ Route by the supplied inputs and requested outcome:
 
 Every component uses the latest stable releases of runtimes and packages and pins the resolved versions. Paper2Repro also replaces outdated tools with its own implementations; see [current software](paper2repro/references/current-software.md).
 
+[skill_checksum.py](scripts/skill_checksum.py) prints a checksum of the installed skill files. Record it with each delivery to identify the skill version.
+
 Resolve each component's scripts and references relative to its own directory; bind `SKILL_ROOT` to that component. Keep their work directories separate. Independent paper and code tasks may run concurrently within host limits. Every MCP tool must bind to existing repository code.
 
 Combined output:

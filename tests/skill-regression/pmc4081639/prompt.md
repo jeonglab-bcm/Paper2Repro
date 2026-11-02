@@ -30,6 +30,9 @@ When you finish, write `{{PROJECT_DIR}}/result.json` with this structure. Paths 
   },
   "pipeline": {
     "command": "<the command that reruns the pipeline>"
+  },
+  "skill": {
+    "checksum": "<the skill checksum that the skill's skill_checksum.py prints, sha256:...>"
   }
 }
 ```

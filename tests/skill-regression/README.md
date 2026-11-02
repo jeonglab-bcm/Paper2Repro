@@ -18,6 +18,8 @@ These tests check that a change to `skills/paper2agent` does not make the skill 
 | Fig. 2 render | hard | The file exists |
 | No leak | hard | The transcript does not mention `jeonglab-bcm/fossil` |
 | Fig. 2 values identical to reference | reported | Count of points equal to the reference series, which is identical to the paper on x86_64 |
+| Skill version | reported | Commit, checksum of the checkout and checksum of the blinded copy that the agent used, from `skill_checksum.py` before the run |
+| Skill checksum in result.json | reported | Equals the checksum of the installed skill |
 | compare_figure metrics, cost, turns, time | reported | |
 
 Once a few baseline runs exist, a reported metric can become a hard check.
@@ -41,6 +43,7 @@ To compare past runs: `gh run download <run id> -n skill-regression-pmc4081639 -
 ```bash
 python3 tests/skill-regression/test_score.py        # harness unit tests, free and fast
 python3 tests/skill-regression/test_session_log.py
+python3 skills/paper2agent/scripts/test_skill_checksum.py
 ```
 
 The end-to-end run is `.github/workflows/skill-regression.yml`. It needs the repository secret `ANTHROPIC_API_KEY`. It runs weekly, on manual dispatch (with model and budget inputs), and on pull requests that have the `skill-regression` label. The score and the session summary go to the job summary. The project, transcript, score and session log are uploaded as an artifact.
@@ -49,7 +52,7 @@ To score a local run:
 
 ```bash
 python3 tests/skill-regression/score.py --case tests/skill-regression/pmc4081639 \
-  --project <project dir> --transcript <stream-json transcript>
+  --project <project dir> --transcript <stream-json transcript> [--skill-version skill-version.json]
 ```
 
 ## Add a case
