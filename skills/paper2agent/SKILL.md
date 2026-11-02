@@ -1,6 +1,6 @@
 ---
 name: paper2agent
-description: Convert research papers and associated files, research code, or both into a reviewed paper skill and tested MCP server. Use for paper-only, code-only, or combined conversions and resumes.
+description: Convert research papers and associated files, research code, or both into a reviewed paper skill and tested MCP server, or reproduce a paper's computed figures and tables and compare them with the published versions. Use for paper-only, code-only, combined, or reproduction runs and resumes.
 ---
 
 # Paper2Agent
@@ -10,6 +10,7 @@ Route by the supplied inputs and requested outcome:
 - For paper PDFs and associated files, follow [Paper2Skill](paper2skill/SKILL.md).
 - For a research code repository, follow [Paper2MCP](paper2mcp/SKILL.md).
 - When both outputs are requested, follow both workflows.
+- To reproduce computed figures or tables and compare them with the published versions, follow [Paper2Repro](paper2repro/SKILL.md). It works with or without a code repository. When paper PDFs are supplied, build the paper skill first and read the paper from it.
 
 Resolve each component's scripts and references relative to its own directory; bind `SKILL_ROOT` to that component. Keep their work directories separate. Independent paper and code tasks may run concurrently within host limits. Every MCP tool must bind to existing repository code.
 
@@ -23,6 +24,6 @@ dist/<project>-agent/
 
 Build the paper skill at its final component path and pass its strict verification. Complete Paper2MCP's existing runtime and ZIP delivery checks, then stage the verified archive contents under `mcp/` and confirm the files are unchanged. Keep review and development evidence outside the delivery.
 
-Single-mode runs retain their component's output contract. Report delivery paths, verification results and limitations. If either component is blocked, report the combined result as partial.
+Single-mode runs retain their component's output contract. Paper2Repro keeps its own output contract and can follow either conversion. Report delivery paths, verification results and limitations. If either component is blocked, report the combined result as partial.
 
 For questions about Paper2Agent's methods, results, figures, or supplementary material, read the [Paper2Agent paper](paper2agent-paper/SKILL.md).

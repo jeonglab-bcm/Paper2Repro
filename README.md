@@ -54,6 +54,15 @@ Read the required API key from the environment variable <VARIABLE_NAME>.
 
 Credentials stay outside generated code, notebooks, reports, and the delivered ZIP.
 
+#### Reproduce Published Figures and Tables
+
+Rebuild a paper's computed figures and tables with its own method, data and plotting tools, and compare them with the published versions pixel by pixel. This works with or without a code repository. See [Paper2Repro](skills/paper2agent/paper2repro/SKILL.md) and its [worked example](skills/paper2agent/paper2repro/references/example-pmc4081639.md).
+
+```text
+Use the paper2agent skill to reproduce Figures 2, 4, 5, 6 and Table 1 of this paper in <PROJECT_DIR>.
+Compare each one with the published figure pixel by pixel and deliver a rerunnable pipeline.
+```
+
 ### Examples
 
 The examples below use Claude Code's `/paper2agent` invocation. In Codex, replace it with `$paper2agent`.
