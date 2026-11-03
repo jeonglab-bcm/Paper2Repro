@@ -1,104 +1,65 @@
-<p align="center">
-  <img src="./logo/paper2agent_logo.png" alt="Paper2Agent Logo" width="600px" />
-</p>
-
-# Paper2Agent: Reimagining Papers As AI Agents
+# Paper2Repro: Reproduce Published Figures and Tables
 
 ## 📖 Overview
-`Paper2Agent` is a multi-agent AI system that automatically transforms research papers into interactive AI agents with minimal human input. Explore [demos](#-demos) of Paper2Agent-generated agents, or try it yourself at [paper2agent.ai](https://paper2agent.ai).
 
-Paper2Agent coordinates parallel specialist agents to turn scientific papers into reliable MCP servers and skills.
+`Paper2Repro` is a Claude Code skill that rebuilds a paper's computed figures and tables with the paper's own method, data and plotting tools. It then compares each result with the published version pixel by pixel.
+
+- Works with or without a code repository.
+- Reads the paper through an agent-readable paper skill, built by the bundled [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) component.
+- Classifies every result with evidence: **identical data**, **same setup** (numeric noise) or **re-measured** (for example, timing on other hardware).
+- Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site.
+- Never changes data to make a figure match. Fitted presentation parameters are listed apart from data.
+
+See the [Paper2Repro skill instructions](skills/paper2agent/paper2repro/SKILL.md) for the full workflow and requirements.
 
 ## 🚀 Quick Start
 
-### Basic Usage
-
-The simplest way to use Paper2Agent is to ask your coding agent (Claude Code, Codex, etc.) to install the paper2agent skill, then agentify a paper alongside its code repository.
+Ask Claude Code to install the skill, then give it the paper:
 
 ```text
-Read https://github.com/jmiao24/Paper2Agent and install the paper2agent skill
-from skills/paper2agent for this coding agent.
+Read https://github.com/jeonglab-bcm/Paper2Repro and install the paper2agent skill
+from skills/paper2agent for Claude Code.
 
-Use the paper2agent skill to agentify this paper and its associated files,
-alongside its code repository if available. Follow the skill instructions
-for the workflow, verification, and final delivery.
+Use the paper2agent skill (its Paper2Repro component) to reproduce the computed
+figures and tables of this paper. Compare each one with the published figure
+pixel by pixel and deliver a rerunnable pipeline.
 
-Paper and associated files: <PAPER_URL_OR_LOCAL_FILES>
+Paper and supplement: <PAPER_URL_OR_LOCAL_FILES>
 Code repository (if available): <GITHUB_URL_OR_LOCAL_PATH>
+Data (if not in the paper or repository): <DATA_URL_OR_LOCAL_PATH>
 Output directory: <PROJECT_DIR>
 ```
 
-If the skill does not appear after installation, restart your coding agent. For manual installation, see [Installation & Setup](#installation).
+If the skill does not appear after installation, restart Claude Code. For manual installation, see [Installation](#installation).
 
-See the [skill instructions](skills/paper2agent/SKILL.md) for supported inputs, workflows, and deliverables.
-
-### Advanced Usage
-
-#### Targeted Tasks or Tutorials
-
-Specify the scientific tasks, tutorial title, or source URL to focus on:
-
-```text
-Use the paper2agent skill to convert <GITHUB_URL> into MCP tools in <PROJECT_DIR>.
-Focus on <TASKS, TUTORIAL_TITLE, or SOURCE_URL>.
-```
-
-#### Repository with API Key
-
-Make credentials available through your host's secret mechanism or process environment, then tell the agent the variable name:
-
-```text
-Use the paper2agent skill to convert <GITHUB_URL> into MCP tools in <PROJECT_DIR>.
-Read the required API key from the environment variable <VARIABLE_NAME>.
-```
-
-Credentials stay outside generated code, notebooks, reports, and the delivered ZIP.
-
-#### Reproduce Published Figures and Tables
-
-Rebuild a paper's computed figures and tables with its own method, data and plotting tools, and compare them with the published versions pixel by pixel. This works with or without a code repository. See [Paper2Repro](skills/paper2agent/paper2repro/SKILL.md) and its [worked example](skills/paper2agent/paper2repro/references/example-pmc4081639.md).
-
-```text
-Use the paper2agent skill to reproduce Figures 2, 4, 5, 6 and Table 1 of this paper in <PROJECT_DIR>.
-Compare each one with the published figure pixel by pixel and deliver a rerunnable pipeline.
-```
+The skill is installed and invoked as `paper2agent` because Paper2Repro uses the other components in the same folder. See [Built on Paper2Agent](#built-on-paper2agent).
 
 ### Examples
 
-The examples below use Claude Code's `/paper2agent` invocation. In Codex, replace it with `$paper2agent`.
-
-#### TISSUE Agent
-
-Create an AI agent from the [TISSUE](https://github.com/sunericd/TISSUE) research paper codebase for uncertainty-calibrated single-cell spatial transcriptomics analysis:
+Reproduce specific items:
 
 ```text
-/paper2agent Convert https://github.com/sunericd/TISSUE into tested MCP tools in TISSUE_Agent.
+/paper2agent Reproduce Figures 2, 4, 5, 6 and Table 1 of <PAPER_URL> in <PROJECT_DIR>.
+Compare each one with the published figure pixel by pixel and deliver a rerunnable pipeline.
 ```
 
-#### Scanpy Agent for Preprocessing and Clustering
-
-Create an AI agent from the [Scanpy](https://github.com/scverse/scanpy) research paper codebase for single-cell analysis preprocessing and clustering:
+Reproduce a paper that has no code repository:
 
 ```text
-/paper2agent Convert https://github.com/scverse/scanpy into tested MCP tools in Scanpy_Agent.
-Focus on the "Preprocessing and clustering" tutorial.
+/paper2agent Reproduce Figure 3 of <PAPER_URL> in <PROJECT_DIR>.
+There is no code repository. Rebuild the method from the paper and its supplement.
+Data: <DATA_URL>
 ```
 
-You can also provide a tutorial URL:
+Run unattended (no questions, local only):
 
 ```text
-/paper2agent Convert https://github.com/scverse/scanpy into tested MCP tools in Scanpy_Agent.
-Focus on https://github.com/scverse/scanpy/blob/main/docs/tutorials/basics/clustering.ipynb.
+/paper2agent Reproduce Table 1 of <PAPER_URL> in <PROJECT_DIR>.
+This is an unattended run. Make reasonable decisions and record them in the project README.
+Work locally only. Do not create repositories, push or deploy a site.
 ```
 
-#### AlphaGenome Agent
-
-Create an AI agent from the [AlphaGenome](https://github.com/google-deepmind/alphagenome) research paper codebase for genomic data interpretation:
-
-```text
-/paper2agent Convert https://github.com/google-deepmind/alphagenome into tested MCP tools in AlphaGenome_Agent.
-Read the API key from the environment variable ALPHAGENOME_API_KEY.
-```
+The skill reads the paper's copyright line and every data license before it plans the output. It commits only the published figures that the comparison needs and asks before it publishes any paper material.
 
 <a id="installation"></a>
 
@@ -106,121 +67,126 @@ Read the API key from the environment variable ALPHAGENOME_API_KEY.
 
 ### Prerequisites
 
-- **Coding-agent host:** A host with skill support, shell access, and parallel subagent spawning enabled. The coordinator launches specialists and fresh verifier agents through the host.
-- **Runtime access:** Python and Git, plus any R, native CLI, data, API, or GPU requirements of the selected repository. The skill prepares isolated project environments and records tested versions.
+- **Claude Code** with skill support, shell access and subagents. See the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
+- **Python 3.11+ and [uv](https://docs.astral.sh/uv/)** for the helper scripts.
+- **Git.**
+- **The paper's own toolchain**, as each paper needs. The worked example and CI use:
+  - R (for papers whose figures were drawn in R)
+  - Java 21 and [Nextflow](https://www.nextflow.io/) for the pipeline
+  - LaTeX and Poppler for tikzDevice figures: `texlive-latex-base`, `texlive-pictures`, `preview-latex-style`, `poppler-utils`
 
-### Manual Installation Steps
+### Manual Installation
 
-To have your coding agent install the skill, use the [Quick Start](#-quick-start) prompt. To install it yourself, follow the steps below.
-
-1. **Clone the Paper2Agent repository**
+1. **Clone this repository**
 
    ```bash
-   git clone https://github.com/jmiao24/Paper2Agent.git
-   cd Paper2Agent
+   git clone https://github.com/jeonglab-bcm/Paper2Repro.git
+   cd Paper2Repro
    ```
 
-2. **Install the entire skill folder for your host**
+2. **Copy the entire skill folder to your personal Claude Code skills directory**
 
-   Choose the command for your host. Copy the entire folder, including all subdirectories and supporting files.
-
-   **Claude Code** — personal skill location from the [Claude Code skills documentation](https://code.claude.com/docs/en/skills):
+   Copy all subdirectories. Paper2Repro reads files from `paper2skill/` and the other components.
 
    ```bash
    mkdir -p "$HOME/.claude/skills/paper2agent"
    cp -R skills/paper2agent/. "$HOME/.claude/skills/paper2agent/"
    ```
 
-   **Codex** — personal skill location from the [official OpenAI skills documentation](https://learn.chatgpt.com/docs/build-skills):
+3. **Start Claude Code in your analysis workspace**
 
-   ```bash
-   mkdir -p "$HOME/.agents/skills/paper2agent"
-   cp -R skills/paper2agent/. "$HOME/.agents/skills/paper2agent/"
-   ```
+   Open Claude Code in the directory where you want to work, then use the [Quick Start](#-quick-start) prompt. If the skill does not appear, restart Claude Code.
 
-3. **Start your coding agent in your analysis workspace**
-
-   Open Claude Code or Codex in the directory where you want to work, then use the [Quick Start](#-quick-start) prompt. If the skill does not appear, restart the coding agent. The skill installs the generated server's dependencies in its project environment during conversion.
-
-## 🤖 How to Create a Paper Agent?
-
-Connect the generated Paper MCP server to an AI coding agent, such as [Claude Code](https://www.anthropic.com/claude-code), Codex, or the [Google Gemini CLI](https://google-gemini.github.io/gemini-cli/), to use its scientific tools in conversation.
-
-### Connect a Generated Local MCP Server
-
-Extract the delivered ZIP and follow its `USAGE.md` to install dependencies and configure your MCP client. The instructions include the tested interpreter, server entry point, required environment variables, and supported platforms.
-
-To have the coding agent configure the connection, explicitly request it after conversion:
+## 📦 Output
 
 ```text
-Connect the generated MCP server to my coding-agent client using its USAGE.md.
+<project>/
+├── README.md
+├── <paper-id>/
+│   ├── README.md              # citation, copyright note, results table
+│   └── reproduction/
+│       ├── main.nf
+│       ├── nextflow.config
+│       ├── pipeline/          # scripts, committed inputs, params/
+│       ├── published/         # only the figures used for comparison
+│       └── output/            # renders: PDF, source, aligned PNG, fit summary
+├── site/                      # static comparison pages
+└── .github/workflows/         # reproduce.yml, pages.yml
 ```
 
-### Connect a Remote MCP Server Hosted on Hugging Face
+The final response starts with a results table (item, status, evidence). It then gives the pipeline and CI status, the site URL, items not reproduced and why, fitted parameters, and licensing exclusions.
 
-You can also use an existing server from [Connectable Paper MCP Servers](#-connectable-paper-mcp-servers). Open the hosted service's instructions for its MCP endpoint, transport, and authentication requirements.
+## 🔬 Worked Example: PMC4081639
 
-For an HTTP endpoint in Claude Code, follow the [MCP connection documentation](https://code.claude.com/docs/en/mcp):
+Yu P, Shaw CA. An efficient algorithm for accurate computation of the Dirichlet-multinomial log-likelihood function. *Bioinformatics* 30(11):1547–1554 (2014). [doi:10.1093/bioinformatics/btu079](https://doi.org/10.1093/bioinformatics/btu079)
+
+- Reproduction: [jeonglab-bcm/fossil](https://github.com/jeonglab-bcm/fossil) (folder `PMC4081639/figure-reproduction`)
+- Comparison site: <https://jeonglab-bcm.github.io/fossil/PMC4081639/>
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Fig. 2 | Identical data | ψ grid found from the published curve; 300 of 300 points equal on x86_64 |
+| Fig. 4 | Identical data | Fig. 2 series plus mesh values from the authors' library |
+| Fig. 5 | Same setup | Same n grid; errors in whole ulps; 26 of 50 VGAM marks identical |
+| Fig. 6 | Re-measured | Timing on other hardware, one scale constant per method; mesh growth matches, VGAM growth differs |
+| Table 1 | Identical at published precision | All four ψ values round to the printed values |
+| Figs 1, 7, 8 | Not reproduced | Computable but out of scope. Fig. 3 is a diagram |
+
+The paper had no code repository. The [full write-up](skills/paper2agent/paper2repro/references/example-pmc4081639.md) lists the findings that changed the outcome and the fitted parameters.
+
+## 🖼️ Pixel Comparison Helper
+
+[`compare_figure.py`](skills/paper2agent/paper2repro/scripts/compare_figure.py) finds the plot panel in both images, aligns the reproduction to the published frame, and measures the difference. You can run it on its own:
 
 ```bash
-claude mcp add --transport http <MCP_NAME> <MCP_ENDPOINT_URL>
+uv run skills/paper2agent/paper2repro/scripts/compare_figure.py \
+  --published figure-4.jpg --render fig4.png \
+  --out compare/fig4 --regions regions.json --window 10
 ```
 
-For example, the [hosted AlphaGenome MCP server](https://Paper2Agent-alphagenome-mcp.hf.space) can provide tools for genomic data interpretation. Once connected, you can input a query like:
+It writes to `--out`:
 
-```text
-Analyze heart gene expression data with AlphaGenome MCP to identify the causal gene
-for the variant chr11:116837649:T>G, associated with Hypoalphalipoproteinemia.
-```
+- `aligned.png`: the reproduction shifted and cropped to the published frame
+- `overlay.png`: red = reproduction only, cyan = published only, black = both
+- `diff.png`: the grey-level difference
+- `report.json`: shift, panel-size difference, mean grey difference, ink chamfer distances inside and outside the panel, and per-region offsets. It warns when a region offset reaches the search window or the panel sizes differ.
 
-### Verification
+`--regions` is optional: a JSON list of `{"name": ..., "box": [x0, x1, y0, y1]}` in published pixels. Use `--published-grey` and `--render-grey` if automatic panel detection fails. Inspect the overlay; one mean-difference score is not evidence of a match.
 
-In Claude Code, check the server's connection status with:
+## 🧪 Testing & CI
+
+| Workflow | Runs | Checks |
+| --- | --- | --- |
+| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, regression scorer and skill blinding, session log |
+| [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
+
+Run the fast tests locally:
 
 ```bash
-claude mcp list
+uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
 ```
 
-Or use `/mcp` inside Claude Code. A successful connection should appear in the server list; use a tool call to confirm the scientific workflow works with your inputs. The screenshot below shows the AlphaGenome MCP server connected in Claude Code.
-
-<img width="620" alt="Claude Code showing the AlphaGenome MCP server connected" src="assets/claude-code-mcp.png" />
-
-## 🎬 Demos
-Below, we showcase demos of AI agents created by Paper2Agent, illustrating how each agent applies the tools from its source paper to tackle scientific tasks.
-### 🧬 AlphaGenome Agent for Genomic Data Interpretation
-Example query:
-```
-Analyze heart gene expression data with AlphaGenome MCP to identify the causal gene
-for the variant chr11:116837649:T>G, associated with Hypoalphalipoproteinemia.
+```bash
+python3 tests/skill-regression/test_score.py
 ```
 
-https://github.com/user-attachments/assets/34aad25b-42b3-4feb-b418-db31066e7f7b
-
-### 🗺️ TISSUE Agent for Uncertainty-Aware Spatial Transcriptomics Analysis
-Example query:
-```
-Calculate the 95% prediction interval for the spatial gene expression prediction of gene Acta2 using TISSUE MCP.
-
-This is my data:
-Spatial count matrix: Spatial_count.txt
-Spatial locations: Locations.txt
-scRNA-seq count matrix: scRNA_count.txt
+```bash
+python3 tests/skill-regression/test_session_log.py
 ```
 
-https://github.com/user-attachments/assets/2c8f6368-fa99-4e6e-b7b5-acc12f741655
+The regression workflow needs the repository secret `ANTHROPIC_API_KEY` and costs API credits. Manual dispatch takes `model` and `max_budget_usd` inputs. The score, a session log (conversation, tool calls, tokens and cost) and the project go to the job summary and the run artifact. See [tests/skill-regression/README.md](tests/skill-regression/README.md) for how the skill is blinded, the pass conditions and how to add a case.
 
-### 🧫 Scanpy Agent for Single-Cell Data Preprocessing
-Example query:
-```
-Use Scanpy MCP to preprocess and cluster the single-cell dataset pbmc_all.h5ad.
-```
+<a id="built-on-paper2agent"></a>
 
-## 🔗 Connectable Paper MCP Servers
-* AlphaGenome: https://Paper2Agent-alphagenome-mcp.hf.space
-* Scanpy: https://Paper2Agent-scanpy-mcp.hf.space
-* TISSUE: https://Paper2Agent-tissue-mcp.hf.space
+## 🧩 Built on Paper2Agent
 
-## 📚 Citation
+Paper2Repro is built on [Paper2Agent](https://github.com/jmiao24/Paper2Agent), a multi-agent system that turns research papers into agent-readable paper skills and tested MCP servers. This repository keeps Paper2Agent's components in `skills/paper2agent/` because Paper2Repro uses them:
+
+- [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) converts the paper and supplement into a paper skill. Paper2Repro reads methods, captions and figures from it.
+- [Paper2MCP](skills/paper2agent/paper2mcp/SKILL.md) converts a code repository into tested MCP tools, if you also want those.
+
+For Paper2Agent demos, hosted MCP servers and MCP connection instructions, see the [Paper2Agent repository](https://github.com/jmiao24/Paper2Agent). If you use Paper2Agent, cite:
+
 ```
 @article{miao2026paper2agent,
   title={Reimagining research papers as interactive and reliable {AI} agents},
@@ -232,3 +198,10 @@ Use Scanpy MCP to preprocess and cluster the single-cell dataset pbmc_all.h5ad.
 }
 ```
 
+## 👥 Maintainers
+
+Paper2Repro is maintained by the Jeong Lab at Baylor College of Medicine. Report problems in [GitHub issues](https://github.com/jeonglab-bcm/Paper2Repro/issues).
+
+## 📄 License
+
+MIT. See [LICENSE](LICENSE).
