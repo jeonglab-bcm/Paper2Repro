@@ -7,7 +7,8 @@
 - Works with or without a code repository.
 - Reads the paper through an agent-readable paper skill, built by the bundled [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) component.
 - Classifies every result with evidence: **identical data**, **same setup** (numeric noise) or **re-measured** (for example, timing on other hardware).
-- Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site.
+- Records every figure, table and number in a `results.json`; `check_results.py` computes each verdict (exact, agrees, partly, inconclusive, differs, not attempted), with negative controls under every figure score and a tested cause for every miss.
+- Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site, in one pull request, with a ledger of the session's prompts, tool calls and tokens.
 - Never changes data to make a figure match. Fitted presentation parameters are listed apart from data.
 
 See the [Paper2Repro skill instructions](skills/paper2agent/paper2repro/SKILL.md) for the full workflow and requirements.
@@ -157,13 +158,17 @@ It writes to `--out`:
 
 | Workflow | Runs | Checks |
 | --- | --- | --- |
-| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, regression scorer and skill blinding, session log |
+| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`), regression scorer and skill blinding, session log |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
 Run the fast tests locally:
 
 ```bash
 uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
+```
+
+```bash
+uv run --with pillow python skills/paper2agent/paper2repro/scripts/test_paper2repro.py
 ```
 
 ```bash

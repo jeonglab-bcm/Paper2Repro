@@ -29,6 +29,9 @@ jobs:
       - name: compare_figure.py synthetic tests
         run: uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
 
+      - name: Paper2Repro self-test (results.json checker, run comparison, ledger)
+        run: uv run --with pillow python skills/paper2agent/paper2repro/scripts/test_paper2repro.py
+
       - name: Regression harness tests (scorer and skill blinding)
         run: python3 tests/skill-regression/test_score.py
 
