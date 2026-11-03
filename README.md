@@ -56,7 +56,7 @@ Credentials stay outside generated code, notebooks, reports, and the delivered Z
 
 #### Reproduce Published Figures and Tables
 
-Rebuild a paper's computed figures and tables with its own method, data and plotting tools, and compare them with the published versions pixel by pixel. This works with or without a code repository. See [Paper2Repro](skills/paper2agent/paper2repro/SKILL.md) and its [worked example](skills/paper2agent/paper2repro/references/example-pmc4081639.md).
+Rebuild a paper's computed figures and tables with its own method, data and plotting tools, and compare them with the published versions pixel by pixel, with negative controls. Every figure, table and number goes into a `results.json` whose verdicts are computed by `check_results.py`, and the session is recorded in a ledger. This works with or without a code repository. See [Paper2Repro](skills/paper2agent/paper2repro/SKILL.md) and its [worked example](skills/paper2agent/paper2repro/references/example-pmc4081639.md).
 
 ```text
 Use the paper2agent skill to reproduce Figures 2, 4, 5, 6 and Table 1 of this paper in <PROJECT_DIR>.

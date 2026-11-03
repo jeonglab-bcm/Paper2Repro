@@ -1,0 +1,448 @@
+{
+  "schema": "paper2repro/results/v1",
+  "paper": {
+    "id": "PMC1847688",
+    "title": "LIMPIC: a computational method for the separation of protein MALDI-TOF-MS signals from noise",
+    "citation": "Mantini D, Petrucci F, Pieragostino D, et al. BMC Bioinformatics 8:101 (2007)",
+    "doi": "10.1186/1471-2105-8-101",
+    "license": "CC BY 2.0"
+  },
+  "run": {
+    "date": "2026-10-28",
+    "pipeline": "PMC1847688/figure-reproduction/main.nf",
+    "command": "nextflow run PMC1847688/figure-reproduction/main.nf --outdir results --octave",
+    "inputs": [
+      {
+        "name": "S1.zip",
+        "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1186%2F1471-2105-8-101/MediaObjects/12859_2006_1473_MOESM1_ESM.zip",
+        "sha256": "8d2f6c2423d683651a303d511091edb65547bda4026e19f9aa5de7ed57d9df33"
+      },
+      {
+        "name": "S2.zip",
+        "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1186%2F1471-2105-8-101/MediaObjects/12859_2006_1473_MOESM2_ESM.zip",
+        "sha256": "f4ded0e64ff76206988181bda17720ece8e8fb60c37a333a7c76c3e35bb4be60"
+      },
+      {
+        "name": "S3.zip",
+        "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1186%2F1471-2105-8-101/MediaObjects/12859_2006_1473_MOESM3_ESM.zip",
+        "sha256": "ab9992f305b4564a171e50d87caeed73ba41f36ff7aa11c793f5aaef11871b24"
+      },
+      {
+        "name": "S4.xls",
+        "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.1186%2F1471-2105-8-101/MediaObjects/12859_2006_1473_MOESM4_ESM.xls",
+        "sha256": "425f21435302aef36e9139c5ff1fca5dd4cf52faadfb84feb87908a86704e21d"
+      }
+    ],
+    "environment": {
+      "python": "3.12",
+      "octave": "Ubuntu 24.04 package"
+    }
+  },
+  "session": {
+    "ledger": "session/ledger.json"
+  },
+  "items": [
+    {
+      "id": "port",
+      "label": "Python port against the authors' MATLAB code",
+      "kind": "code_check",
+      "source": "port",
+      "method": "check",
+      "check": {
+        "passed": true,
+        "detail": "Same peaks, classes and intermediate signals on all 60 spectra, to six decimals (port_check.json)"
+      },
+      "verdict": "agrees"
+    },
+    {
+      "id": "fig1",
+      "label": "Fig. 1",
+      "kind": "figure",
+      "source": "none",
+      "method": "none",
+      "cause": {
+        "category": "not_a_result",
+        "summary": "A diagram of the method; there is nothing to recompute.",
+        "evidence": [
+          "figure-reproduction/published/figure-1.png"
+        ],
+        "status": "explained"
+      },
+      "verdict": "not_attempted"
+    },
+    {
+      "id": "fig2",
+      "label": "Fig. 2",
+      "kind": "figure",
+      "source": "papers_data",
+      "method": "pixels",
+      "pixels": {
+        "tolerance_px": 2,
+        "dpi": 600,
+        "published_near_ours": 0.9999,
+        "ours_near_published": 0.9996,
+        "threshold": 0.99,
+        "controls": [
+          {
+            "name": "spectrum P_14 in place of P_15",
+            "kind": "wrong_input",
+            "score": 0.3402
+          },
+          {
+            "name": "spectrum P_16 in place of P_15",
+            "kind": "wrong_input",
+            "score": 0.622
+          },
+          {
+            "name": "amplitude x1.05",
+            "kind": "near_miss",
+            "score": 0.9826
+          },
+          {
+            "name": "amplitude x0.90",
+            "kind": "near_miss",
+            "score": 0.9707
+          },
+          {
+            "name": "m/z shifted by 20 Da",
+            "kind": "near_miss",
+            "score": 0.7998
+          }
+        ]
+      },
+      "assumptions": [
+        {
+          "what": "The figure plots raw counts divided by 5",
+          "source": "read_from_figure",
+          "sensitivity": "At 0.19 or 0.21 times the counts the score falls to 98.97% and 98.26%"
+        }
+      ],
+      "outputs": [
+        "figure-reproduction/output/fig2_ours.png",
+        "figure-reproduction/output/fig2_overlay.png"
+      ],
+      "verdict": "agrees"
+    },
+    {
+      "id": "fig3.b",
+      "label": "Fig. 3b",
+      "kind": "figure",
+      "source": "port",
+      "method": "pixels",
+      "pixels": {
+        "tolerance_px": 2,
+        "dpi": 600,
+        "published_near_ours": 0.9999,
+        "ours_near_published": 0.9913,
+        "threshold": 0.995,
+        "controls": [
+          {
+            "name": "spectrum P_14 in place of P_15",
+            "kind": "wrong_input",
+            "score": 0.6847
+          },
+          {
+            "name": "smoothing window 30 in place of 20",
+            "kind": "near_miss",
+            "score": 0.8995
+          },
+          {
+            "name": "amplitude x1.05",
+            "kind": "near_miss",
+            "score": 0.9824
+          },
+          {
+            "name": "amplitude x0.95",
+            "kind": "near_miss",
+            "score": 0.9931
+          }
+        ]
+      },
+      "cause": {
+        "category": "metric_resolution",
+        "summary": "The 2 px score cannot tell this trace from one 5% lower (99.31% against our 99.13%), so the amplitude is not confirmed; the spectrum and the smoothing window are.",
+        "evidence": [
+          "negative-control run of compare.py with perturbed series"
+        ],
+        "hypotheses": [
+          {
+            "hypothesis": "A 5% amplitude error would fail the comparison",
+            "test": "Score P_15 x0.95 and x1.05 against Fig. 3b",
+            "result": "rejected"
+          }
+        ],
+        "status": "explained"
+      },
+      "outputs": [
+        "figure-reproduction/output/fig3_ours.png",
+        "figure-reproduction/output/fig3_overlay.png"
+      ],
+      "verdict": "inconclusive"
+    },
+    {
+      "id": "fig5.monotone-minimum",
+      "label": "Fig. 5, monotone-minimum baseline",
+      "kind": "figure",
+      "source": "reconstructed",
+      "method": "pixels",
+      "pixels": {
+        "tolerance_px": 2,
+        "dpi": 600,
+        "published_near_ours": 0.9999,
+        "ours_near_published": 0.9845,
+        "threshold": 0.98,
+        "controls": [
+          {
+            "name": "LIMPIC's baseline drawn as the comparison curve",
+            "kind": "wrong_input",
+            "score": 0.0484
+          },
+          {
+            "name": "best neighbouring wavelet setting",
+            "kind": "near_miss",
+            "score": 0.72
+          }
+        ]
+      },
+      "assumptions": [
+        {
+          "what": "Undecimated db4 wavelet, 9 levels, hard threshold at 6 times the noise",
+          "source": "found_by_search",
+          "sensitivity": "Neighbouring settings score 72% or below"
+        }
+      ],
+      "outputs": [
+        "figure-reproduction/output/fig5_ours.png",
+        "figure-reproduction/output/fig5_overlay.png"
+      ],
+      "verdict": "agrees"
+    },
+    {
+      "id": "fig7",
+      "label": "Fig. 7, LIMPIC panel",
+      "kind": "figure",
+      "source": "port",
+      "method": "pixels",
+      "pixels": {
+        "tolerance_px": 2,
+        "dpi": 600,
+        "published_near_ours": 0.9957,
+        "ours_near_published": 0.9993,
+        "threshold": 0.98,
+        "controls": [
+          {
+            "name": "spectrum P_14 in place of P_15",
+            "kind": "wrong_input",
+            "score": 0.1287
+          },
+          {
+            "name": "spectrum P_16 in place of P_15",
+            "kind": "wrong_input",
+            "score": 0.0415
+          },
+          {
+            "name": "amplitude x1.05",
+            "kind": "near_miss",
+            "score": 0.9291
+          },
+          {
+            "name": "amplitude x0.95",
+            "kind": "near_miss",
+            "score": 0.9432
+          }
+        ]
+      },
+      "assumptions": [
+        {
+          "what": "Excess kurtosis in find_intervals.m (MATLAB's kurtosis is never below 1, so the published code stops)",
+          "source": "our_choice",
+          "sensitivity": "With it the 16 published peaks come back at their published positions"
+        }
+      ],
+      "outputs": [
+        "figure-reproduction/output/fig7_ours.png",
+        "figure-reproduction/output/fig7_overlay.png"
+      ],
+      "verdict": "agrees"
+    },
+    {
+      "id": "fig9.b",
+      "label": "Fig. 9b, PDR histogram of Additional File 4",
+      "kind": "figure",
+      "source": "supplement_values",
+      "method": "values",
+      "values": {
+        "tolerance": {
+          "abs": 3
+        },
+        "fields": [
+          {
+            "name": "bar 1",
+            "expected": 811.4,
+            "observed": 801
+          },
+          {
+            "name": "bar 2",
+            "expected": 358.6,
+            "observed": 359
+          },
+          {
+            "name": "bar 3",
+            "expected": 208.0,
+            "observed": 207
+          },
+          {
+            "name": "bar 4",
+            "expected": 107.9,
+            "observed": 106
+          },
+          {
+            "name": "bar 5",
+            "expected": 47.1,
+            "observed": 49
+          },
+          {
+            "name": "bar 6",
+            "expected": 20.8,
+            "observed": 28
+          },
+          {
+            "name": "bar 7",
+            "expected": 7.4,
+            "observed": 7
+          },
+          {
+            "name": "bar 8",
+            "expected": 5.8,
+            "observed": 6
+          },
+          {
+            "name": "bar 9",
+            "expected": 5.8,
+            "observed": 6
+          },
+          {
+            "name": "bar 10",
+            "expected": 12.0,
+            "observed": 12
+          }
+        ]
+      },
+      "assumptions": [
+        {
+          "what": "Published bar heights read at each bar's centre",
+          "source": "read_from_figure",
+          "sensitivity": "The y-axis tick fit is within 0.55 counts"
+        }
+      ],
+      "cause": {
+        "category": "unknown",
+        "summary": "Bars 1 and 6 differ by 10 and 7 classes; the figure was probably drawn from a different class list than Additional File 4.",
+        "hypotheses": [
+          {
+            "hypothesis": "MATLAB's hist moves classes that sit on a bin edge",
+            "test": "Bin edges are at 3.9, 6.8, ... 27.1 members; no class count lies on one",
+            "result": "rejected"
+          },
+          {
+            "hypothesis": "The bar heights are misread",
+            "test": "Fit of the y-axis ticks: largest residual 0.55 counts",
+            "result": "rejected"
+          }
+        ],
+        "status": "open"
+      },
+      "outputs": [
+        "figure-reproduction/output/fig9_ours.png",
+        "figure-reproduction/output/fig9_overlay.png"
+      ],
+      "verdict": "partly"
+    },
+    {
+      "id": "fig9.c",
+      "label": "Fig. 9c and 9d",
+      "kind": "figure",
+      "source": "none",
+      "method": "none",
+      "cause": {
+        "category": "undocumented_setting",
+        "summary": "Each stem is divided by a smooth exponential noise curve that LIMPIC 1.1 does not compute and the paper does not describe; taking the curve from the figure would make the comparison circular.",
+        "evidence": [
+          "figure-reproduction/README.md, section on Figs 9c and 9d"
+        ],
+        "status": "explained"
+      },
+      "verdict": "not_attempted"
+    },
+    {
+      "id": "text.plasma_totals",
+      "label": "Plasma peaks, classes and selected classes (text)",
+      "kind": "value",
+      "source": "port",
+      "method": "values",
+      "values": {
+        "tolerance": {
+          "printed": true
+        },
+        "fields": [
+          {
+            "name": "peaks",
+            "expected": "4382",
+            "observed": 9071
+          },
+          {
+            "name": "classes",
+            "expected": "1581",
+            "observed": 2077
+          },
+          {
+            "name": "classes with PDR >= 0.5",
+            "expected": "62",
+            "observed": 119
+          }
+        ]
+      },
+      "cause": {
+        "category": "unknown",
+        "summary": "The published classification came from a run that LIMPIC 1.1 with the published settings does not repeat; Additional File 4 itself disagrees with the text (7,893 peaks).",
+        "evidence": [
+          "figure-reproduction/README.md, section 'Additional File 4 cannot be regenerated'"
+        ],
+        "hypotheses": [
+          {
+            "hypothesis": "A different kurtosis definition (Eq. 3 as printed, excess, unbiased excess)",
+            "test": "Rerun all 30 spectra with each; compare peak intensities with Additional File 4",
+            "result": "rejected"
+          },
+          {
+            "hypothesis": "150 Da blocks, as the text says",
+            "test": "Rerun with 150 Da blocks",
+            "result": "rejected"
+          },
+          {
+            "hypothesis": "A baseline through block means",
+            "test": "Rerun with block means",
+            "result": "rejected"
+          },
+          {
+            "hypothesis": "The 30 subjects are in a different order",
+            "test": "Match subjects to files by peak positions and intensity profiles",
+            "result": "rejected"
+          }
+        ],
+        "status": "open"
+      },
+      "verdict": "differs"
+    }
+  ],
+  "summary": {
+    "items": 9,
+    "exact": 0,
+    "agrees": 4,
+    "partly": 1,
+    "inconclusive": 1,
+    "differs": 1,
+    "not_attempted": 2,
+    "open_causes": 2
+  }
+}
