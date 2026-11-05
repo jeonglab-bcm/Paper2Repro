@@ -34,6 +34,8 @@ Use a workflow engine (Nextflow in the worked example) with one process per step
 
 After you open the pull request, post a review on it. List the items you did not reproduce, the largest risks, the fitted parameters, the mistakes that you fixed, and the open checks. Close each open check with a comment when CI answers it.
 
+Check each sentence of the write-up against the numbers it cites, not only the numbers. Ask: does the sentence follow from our run, or from an arithmetic check or a sensitivity variant ([text-claims.md](text-claims.md))? Give this check to a reviewer (a subagent) that gets the outputs and the text but not your conclusions. In PMC2349296 the self-review checked every number and missed that "as in the paper" cited a sensitivity column.
+
 Write the review in ASD-STE100 style:
 
 - Keep instructions to 20 words or fewer and descriptions to 25 words or fewer.

@@ -28,6 +28,6 @@ Validate an emulation on the original architecture. GitHub `ubuntu-24.04` runner
 
 ## When the code is not available
 
-- If the paper names a package for a comparison method ("the method in VGAM"), get the cited version's source from the archive. If you write your own version, say so and report the agreement count (for example, 26 of 50 marks).
+- If the paper names a package for a comparison method ("the method in VGAM"), get the cited version's source from the archive. If you write your own version, say so and report the agreement count (for example, 26 of 50 marks). Count only inputs that are identical to the paper's; see [mismatch-investigation.md](mismatch-investigation.md#when-several-inputs-differ).
 - For binary-only supplements, call the compiled library through a small C driver. Difference-test it against a reimplementation and an exact reference. Keep decompiled code local; it falls under the library's license.
 - Commit the outputs you computed with tools you cannot redistribute, and mark them as such.

@@ -11,6 +11,9 @@ Check every line on the pull request's head commit. Each one is here because a p
 - [ ] Every constant read off a figure or found by search is an `assumption` with its sensitivity.
 - [ ] Every `partly`, `inconclusive`, `differs` and `not_attempted` item has a cause; `open` causes list at least two tested hypotheses.
 - [ ] If the authors' code was ported, the port is checked against the original runtime on the paper's data.
+- [ ] Every claim in the text is recomputed from the paper's own tables (`text.arithmetic`) before it is compared with our run ([text-claims.md](text-claims.md)).
+- [ ] No number from a sensitivity variant (one of the paper's values put into our run) is cited as agreement anywhere.
+- [ ] A rebuilt tool's agreement count uses only inputs identical to the paper's.
 
 ## Pipeline and CI
 
@@ -27,6 +30,8 @@ Check every line on the pull request's head commit. Each one is here because a p
 - [ ] The front page lists the paper, with its verdict taken from `results.json`.
 - [ ] The top-level README table lists the paper and its workflow.
 - [ ] `<id>/README.md` and `<id>/figure-reproduction/README.md` follow the existing papers: citation, licence, what is and is not in the repository, Results, what the code does against the paper, Layout, Run, Pipeline steps, Limits.
+- [ ] The claims section of the README and the results page ends with one line: the verdict on the main claim and the causes of the claims that do not match.
+- [ ] The self-review checked each sentence against the numbers it cites ([publishing.md](publishing.md#self-review)).
 - [ ] If the paper ships code that differs from its text, a code-analysis folder with executable checks, and its page.
 - [ ] Nothing the licence forbids is committed (paper PDFs, supplements, authors' code); large or restricted sources are git-ignored.
 
