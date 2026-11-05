@@ -21,6 +21,15 @@ Check every line on the pull request's head commit. Each one is here because a p
 - [ ] The pull-request workflow finishes inside its budget on a standard runner. Steps that do not (refits, long searches) run on `workflow_dispatch` or a schedule, and the README says so.
 - [ ] The exact CI command was run from a clean checkout before pushing.
 
+## Package and tutorial
+
+- [ ] The paper's method is a Python package in `<id>/package/`, or the `package` item is `not_attempted` because the paper has no reusable method.
+- [ ] The pipeline imports the package for the method; there is no second copy of the method's code.
+- [ ] `pip install "git+https://github.com/<owner>/<repo>#subdirectory=<id>/package"` is the install command in the package README and the tutorial.
+- [ ] The example data are 1 MB or less, licensed for redistribution, and `data/README.md` says where the input and the expected output come from. The expected output does not come from the package itself.
+- [ ] The tutorial shows install, the example input, a run through the API and the command line, and the comparison with the expected output. Its outputs were saved by `check_package.py --write`, and `TUTORIAL.md` was generated from it.
+- [ ] `check_package.py <id>/package` exits 0 in CI, and its result is the `package` item in `results.json`.
+
 ## Pages and docs
 
 - [ ] The paper's results page is generated from `results.json` and the published figures; no verdict is typed into a template.
@@ -48,6 +57,9 @@ Check every line on the pull request's head commit. Each one is here because a p
 
 ### Not exact, and why
 <One line per non-exact item: the cause and whether it is explained or open, with what was ruled out.>
+
+### Package
+`pip install "git+https://github.com/<owner>/<repo>#subdirectory=<id>/package"`; tutorial: `<id>/package/tutorial/TUTORIAL.md`. <Or: no reusable method, and why.>
 
 ### Run
 `nextflow run <id>/figure-reproduction/main.nf --outdir results` (<minutes> min on <machine>). CI: <workflow name>, <minutes> min.

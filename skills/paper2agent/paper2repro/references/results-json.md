@@ -22,7 +22,7 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
 
 | Field | Content |
 | --- | --- |
-| `id` | Stable and unique: `fig2`, `fig3.b`, `fig5.monotone-minimum`, `table1`, `table2.row3`, `text.plasma_totals`, `port`. |
+| `id` | Stable and unique: `fig2`, `fig3.b`, `fig5.monotone-minimum`, `table1`, `table2.row3`, `text.plasma_totals`, `port`, `package`. |
 | `label` | As a reader would say it: "Fig. 3b", "Table 1, LIMPIC rows". |
 | `kind` | `figure`, `table`, `value` (a number in the text) or `code_check`. |
 | `source` | Where our version comes from: `authors_code`, `port` (checked against it), `papers_data`, `supplement_values` (replotted from a supplement table), `reconstructed` (rebuilt from public data or an unstated method), `public_data`, `none`. |
@@ -35,6 +35,8 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
 | `outputs` | Paths, relative to the paper folder, of the render and overlay of a scored figure. |
 
 Give printed values as strings (`"0.69"`, `"277.37"`) so `{"printed": true}` knows their precision: half a unit in the last printed digit.
+
+The `package` item is a `code_check` whose `check` comes from the `check_package.py --json` report: `passed` and its `detail` line. See [package-and-tutorial.md](package-and-tutorial.md).
 
 ## Verdict rules
 
@@ -71,7 +73,7 @@ Required for `partly`, `inconclusive`, `differs` and `not_attempted`; allowed on
 | `proprietary_software` | The result needs software that is not available. |
 | `nondeterminism` | Random seeds, run order, platform arithmetic. |
 | `environment` | Library or runtime versions. |
-| `not_a_result` | A diagram or schematic. |
+| `not_a_result` | A diagram or schematic; for the `package` item, a paper with no reusable method. |
 | `metric_resolution` | The comparison cannot resolve the difference (an `inconclusive` item). |
 | `unknown` | Only with status `open`. |
 

@@ -8,6 +8,7 @@
 - Reads the paper through an agent-readable paper skill, built by the bundled [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) component.
 - Classifies every result with evidence: **identical data**, **same setup** (numeric noise) or **re-measured** (for example, timing on other hardware).
 - Records every figure, table and number in a `results.json`; `check_results.py` computes each verdict (exact, agrees, partly, inconclusive, differs, not attempted), with negative controls under every figure score and a tested cause for every miss.
+- Packages the paper's method as a pip-installable Python package with example data, tests and an executed tutorial. See [Package and Tutorial](#-package-and-tutorial).
 - Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site, in one pull request, with a ledger of the session's prompts, tool calls and tokens.
 - Never changes data to make a figure match. Fitted presentation parameters are listed apart from data.
 
@@ -101,21 +102,49 @@ The skill reads the paper's copyright line and every data license before it plan
 ## 📦 Output
 
 ```text
-<project>/
-├── README.md
+<repository>/
 ├── <paper-id>/
-│   ├── README.md              # citation, copyright note, results table
-│   └── reproduction/
-│       ├── main.nf
-│       ├── nextflow.config
-│       ├── pipeline/          # scripts, committed inputs, params/
-│       ├── published/         # only the figures used for comparison
-│       └── output/            # renders: PDF, source, aligned PNG, fit summary
-├── site/                      # static comparison pages
-└── .github/workflows/         # reproduce.yml, pages.yml
+│   ├── README.md                  citation, licence, what is kept local
+│   ├── results.json               every figure, table and number, with computed verdicts
+│   ├── session/                   ledger.json, conversation.md
+│   ├── figure-reproduction/
+│   │   ├── main.nf, nextflow.config, requirements.txt
+│   │   ├── pipeline/              fetch, run or port, compare, check and page scripts
+│   │   ├── published/             only the figures used for comparison
+│   │   └── output/                renders, overlays, comparison.json, report.md
+│   └── package/                   the paper's method as a Python package
+│       ├── pyproject.toml, README.md, LICENSE
+│       ├── src/<name>/            the method, the command line, data/ (example input and expected output)
+│       ├── tests/
+│       └── tutorial/              tutorial.ipynb (executed) and TUTORIAL.md
+├── site/<paper-id>/               the results page
+└── .github/workflows/             reproduce-<paper-id>.yml
 ```
 
-The final response starts with a results table (item, status, evidence). It then gives the pipeline and CI status, the site URL, items not reproduced and why, fitted parameters, and licensing exclusions.
+The pull request starts with the `check_results.py` table (item, verdict, measure, why). It then gives the cause of every item that is not exact, the package's install command and tutorial, the run command with its CI time, and the session ledger.
+
+## 🐍 Package and Tutorial
+
+When the paper has a method a reader would apply to new data, Paper2Repro also delivers it as a pip-installable Python package. The pipeline imports the package, so the code that reproduced the paper is the code you install. Each package ships:
+
+- the method as a Python API and a command line;
+- a small example input and its expected output, taken from a source other than the package (the paper's printed values, the authors' code, or the formula behind synthetic data);
+- tests that run against the installed package;
+- an executed tutorial (`tutorial.ipynb` and `TUTORIAL.md`) that covers install, the example input, a run through the API and the command line, the comparison with the expected output, and how to use your own data.
+
+Install a paper's package from its folder in the repository:
+
+```bash
+pip install "git+https://github.com/<owner>/<repo>#subdirectory=<paper-id>/package"
+```
+
+New packages start from the [package template](skills/paper2agent/paper2repro/assets/package-template). See [its tutorial](skills/paper2agent/paper2repro/assets/package-template/tutorial/TUTORIAL.md) for what a finished one looks like. [`check_package.py`](skills/paper2agent/paper2repro/scripts/check_package.py) builds the wheel and installs it into a fresh environment. It then runs the tests, reruns the tutorial and compares its outputs with the saved ones:
+
+```bash
+python3 skills/paper2agent/paper2repro/scripts/check_package.py <paper-id>/package
+```
+
+Add `--write` to save fresh tutorial outputs and regenerate `TUTORIAL.md`. The rules are in [package-and-tutorial.md](skills/paper2agent/paper2repro/references/package-and-tutorial.md).
 
 ## 🔬 Worked Example: PMC4081639
 
@@ -158,7 +187,7 @@ It writes to `--out`:
 
 | Workflow | Runs | Checks |
 | --- | --- | --- |
-| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`), regression scorer and skill blinding, session log |
+| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
 Run the fast tests locally:
@@ -169,6 +198,10 @@ uv run skills/paper2agent/paper2repro/scripts/test_compare_figure.py
 
 ```bash
 uv run --with pillow python skills/paper2agent/paper2repro/scripts/test_paper2repro.py
+```
+
+```bash
+python3 skills/paper2agent/paper2repro/scripts/check_package.py skills/paper2agent/paper2repro/assets/package-template
 ```
 
 ```bash
