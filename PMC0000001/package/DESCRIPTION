@@ -1,0 +1,7 @@
+Package: peakfit
+Title: Test Package for Install Commands
+Version: 0.1.0
+Authors@R: person("Test", "Author", email = "test@example.org", role = c("aut", "cre"))
+Description: A minimal package used to check install commands from a repository subfolder.
+License: MIT + file LICENSE
+Encoding: UTF-8
