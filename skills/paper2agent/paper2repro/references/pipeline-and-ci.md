@@ -9,10 +9,10 @@ One `main.nf` per paper, run from the repository root:
 | Process | Does |
 | --- | --- |
 | `FETCH` | `pipeline/fetch_inputs.sh [DIR]`: download every input, check SHA-256, unpack. `--sources DIR` reuses local copies. |
-| `RUN` / `PORT` | The authors' code or the port, on the paper's data. The method comes from the installed package `<id>/package` ([package-and-tutorial.md](package-and-tutorial.md)). |
+| `RUN` / `PORT` | The authors' code or the port, on the paper's data. The method comes from the installed Python or R package `<id>/package` ([package-and-tutorial.md](package-and-tutorial.md)). |
 | `PORT_CHECK` (optional flag) | The port against the original runtime (`--octave` in PMC1847688). |
 | `COMPARE`, `TABLES` | Renders, overlays, scores, controls, table values. |
-| `PACKAGE` | `check_package.py <id>/package --json package.json`: wheel, fresh install, tests, tutorial rerun. |
+| `PACKAGE` | Python: `check_package.py <id>/package --json package.json` (wheel, fresh install, tests, tutorial rerun). R: `R CMD build`, `R CMD check --no-manual`, tutorial render ([R steps](package-and-tutorial.md#check-an-r-package)). |
 | `RESULTS` | Merge the scores, the package report and the hand-written notes into `results.json`; run `check_results.py --write`. |
 | `CHECK` | `check_results.py` must pass; `compare_runs.py` against the committed `output/` must find no difference; write `report.md`. |
 | `BUILD_PAGE` | The results page from `results.json` and the published figures. |
@@ -36,7 +36,7 @@ Pin what the scores depend on: `requirements.txt` with `==` versions installed b
 - a pass mark is breached (`check_results.py` exits 1);
 - the fresh run differs from the committed outputs (`compare_runs.py <fresh> <id>/figure-reproduction/output`, with `--ignore` only for files that cannot be reproduced bit for bit, each named in the README);
 - an expected output is missing;
-- the package check fails (`check_package.py` exits 1).
+- the package check fails (`check_package.py` exits 1, or an R step fails).
 
 Print `report.md` with the `check_results.py --markdown` table and the `compare_runs.py` table, and send it to the job summary.
 
@@ -75,6 +75,8 @@ jobs:
         with: {python-version: "3.12"}
       - run: pip install -r <PMCID>/figure-reproduction/requirements.txt ./<PMCID>/package
       - uses: astral-sh/setup-uv@v6  # check_package.py builds and installs the package with uv
+      # R package instead: drop ./<PMCID>/package above, add r-lib/actions/setup-r@v2 and
+      # r-lib/actions/setup-r-dependencies@v2 (working-directory: <PMCID>/package, extra-packages: any::rcmdcheck)
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: "21"}
       - uses: nf-core/setup-nextflow@v2

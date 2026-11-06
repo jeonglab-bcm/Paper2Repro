@@ -8,7 +8,7 @@
 - Reads the paper through an agent-readable paper skill, built by the bundled [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) component.
 - Classifies every result with evidence: **identical data**, **same setup** (numeric noise) or **re-measured** (for example, timing on other hardware).
 - Records every figure, table and number in a `results.json`; `check_results.py` computes each verdict (exact, agrees, partly, inconclusive, differs, not attempted), with negative controls under every figure score and a tested cause for every miss.
-- Packages the paper's method as a pip-installable Python package with example data, tests and an executed tutorial. See [Package and Tutorial](#-package-and-tutorial).
+- Packages the paper's method as an installable Python or R package with example data, tests and an executed tutorial. See [Package and Tutorial](#-package-and-tutorial).
 - Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site, in one pull request, with a ledger of the session's prompts, tool calls and tokens.
 - Never changes data to make a figure match. Fitted presentation parameters are listed apart from data.
 
@@ -112,7 +112,7 @@ The skill reads the paper's copyright line and every data license before it plan
 │   │   ├── pipeline/              fetch, run or port, compare, check and page scripts
 │   │   ├── published/             only the figures used for comparison
 │   │   └── output/                renders, overlays, comparison.json, report.md
-│   └── package/                   the paper's method as a Python package
+│   └── package/                   the paper's method as a Python package (shown) or an R package
 │       ├── pyproject.toml, README.md, LICENSE
 │       ├── src/<name>/            the method, the command line, data/ (example input and expected output)
 │       ├── tests/
@@ -125,12 +125,14 @@ The pull request starts with the `check_results.py` table (item, verdict, measur
 
 ## 🐍 Package and Tutorial
 
-When the paper has a method a reader would apply to new data, Paper2Repro also delivers it as a pip-installable Python package. The pipeline imports the package, so the code that reproduced the paper is the code you install. Each package ships:
+When the paper has a method a reader would apply to new data, Paper2Repro also delivers it as an installable package. The pipeline calls the package, so the code that reproduced the paper is the code you install. Each package ships:
 
-- the method as a Python API and a command line;
+- the method as an API (and, in Python, a command line);
 - a small example input and its expected output, taken from a source other than the package (the paper's printed values, the authors' code, or the formula behind synthetic data);
 - tests that run against the installed package;
-- an executed tutorial (`tutorial.ipynb` and `TUTORIAL.md`) that covers install, the example input, a run through the API and the command line, the comparison with the expected output, and how to use your own data.
+- an executed tutorial (a notebook in Python, a vignette in R, both rendered to `TUTORIAL.md`) that covers install, the example input, a run through the API, the comparison with the expected output, and how to use your own data.
+
+The package is in Python or R. Name the language in the kickoff prompt (`Package language: python` or `r`). Otherwise the default applies: R when the method relies on R or Bioconductor packages (DESeq2, limma, edgeR), Python otherwise. Methods written in other languages are ported and checked against the original. When only proprietary software (SAS, Stata) runs the original, the port is checked against the paper instead.
 
 Install a paper's package from its folder in the repository:
 
@@ -138,13 +140,17 @@ Install a paper's package from its folder in the repository:
 pip install "git+https://github.com/<owner>/<repo>#subdirectory=<paper-id>/package"
 ```
 
-New packages start from the [package template](skills/paper2agent/paper2repro/assets/package-template). See [its tutorial](skills/paper2agent/paper2repro/assets/package-template/tutorial/TUTORIAL.md) for what a finished one looks like. [`check_package.py`](skills/paper2agent/paper2repro/scripts/check_package.py) builds the wheel and installs it into a fresh environment. It then runs the tests, reruns the tutorial and compares its outputs with the saved ones:
+```r
+remotes::install_github("<owner>/<repo>/<paper-id>/package")
+```
+
+Python packages start from the [package template](skills/paper2agent/paper2repro/assets/package-template). See [its tutorial](skills/paper2agent/paper2repro/assets/package-template/tutorial/TUTORIAL.md) for what a finished one looks like. [`check_package.py`](skills/paper2agent/paper2repro/scripts/check_package.py) builds the wheel and installs it into a fresh environment. It then runs the tests, reruns the tutorial and compares its outputs with the saved ones:
 
 ```bash
 python3 skills/paper2agent/paper2repro/scripts/check_package.py <paper-id>/package
 ```
 
-Add `--write` to save fresh tutorial outputs and regenerate `TUTORIAL.md`. The rules are in [package-and-tutorial.md](skills/paper2agent/paper2repro/references/package-and-tutorial.md).
+Add `--write` to save fresh tutorial outputs and regenerate `TUTORIAL.md`. R packages are checked with `R CMD build` and `R CMD check` for now; an R checker will follow. The rules are in [package-and-tutorial.md](skills/paper2agent/paper2repro/references/package-and-tutorial.md).
 
 ## 🔬 Worked Example: PMC4081639
 

@@ -17,6 +17,7 @@ TUTORIAL.md is the committed notebook rendered. Rules: references/package-and-tu
 
 Standard library only (Python 3.11+). Uses uv when it is on PATH, otherwise venv and pip.
 Installing the package's dependencies and the test tools needs network access.
+An R package (DESCRIPTION, no pyproject.toml) exits with code 2: follow the R steps in the reference.
 """
 
 from __future__ import annotations
@@ -472,6 +473,10 @@ def main():
     args = ap.parse_args()
 
     pkg = Path(args.package).resolve()
+    if (pkg / "DESCRIPTION").is_file() and not (pkg / "pyproject.toml").is_file():
+        print(f"{pkg} is an R package. check_package.py checks Python packages only; run the R steps in "
+              "references/package-and-tutorial.md (Check an R package).", file=sys.stderr)
+        sys.exit(2)
     rep = Report()
     project, name, nb = check_layout(pkg, rep, args.max_data_kb, args.write)
     if nb is not None and not args.write:

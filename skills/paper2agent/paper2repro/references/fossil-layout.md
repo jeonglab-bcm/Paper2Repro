@@ -18,14 +18,15 @@ How a paper sits in `jeonglab-bcm/fossil`. Read `README.md` and `design.md` too;
 │   │                              check_reproduction.py, build_page.py, page_template.html
 │   ├── published/                 the paper's figures for comparison, with the licence note
 │   └── output/                    fig*_ours.png, fig*_overlay.png, comparison.json, tables.json, report.md
-├── package/                       the method as a Python package: pyproject.toml, src/<name>/ (with data/),
-│                                  tests/, tutorial/tutorial.ipynb and TUTORIAL.md (package-and-tutorial.md)
+├── package/                       the method as a Python package (pyproject.toml, src/<name>/ with data/, tests/,
+│                                  tutorial/) or an R package (DESCRIPTION, R/, inst/extdata/, tests/testthat/,
+│                                  vignettes/tutorial.Rmd, tutorial/); see package-and-tutorial.md
 └── <code>-implementation-analysis/   when the paper ships code: README and executable checks
 ```
 
 Git-ignored and kept local: `<PMCID>/sources/` (paper, supplements, authors' code), `<PMCID>/<name>-paper/` (the Paper2Skill reading package), `<PMCID>/paper-review/`, `<PMCID>/staging/`, and any virtual environment. Add these lines to `.gitignore` in the same pull request.
 
-Install a paper's package with `pip install "git+https://github.com/jeonglab-bcm/fossil#subdirectory=<PMCID>/package"`.
+Install a paper's package with `pip install "git+https://github.com/jeonglab-bcm/fossil#subdirectory=<PMCID>/package"` (Python) or `remotes::install_github("jeonglab-bcm/fossil/<PMCID>/package")` (R).
 
 ## Licences
 

@@ -26,12 +26,13 @@ Check every line on the pull request's head commit. Each one is here because a p
 
 ## Package and tutorial
 
-- [ ] The paper's method is a Python package in `<id>/package/`, or the `package` item is `not_attempted` because the paper has no reusable method.
-- [ ] The pipeline imports the package for the method; there is no second copy of the method's code.
-- [ ] `pip install "git+https://github.com/<owner>/<repo>#subdirectory=<id>/package"` is the install command in the package README and the tutorial.
-- [ ] The example data are 1 MB or less, licensed for redistribution, and `data/README.md` says where the input and the expected output come from. The expected output does not come from the package itself.
-- [ ] The tutorial shows install, the example input, a run through the API and the command line, and the comparison with the expected output. Its outputs were saved by `check_package.py --write`, and `TUTORIAL.md` was generated from it.
-- [ ] `check_package.py <id>/package` exits 0 in CI, and its result is the `package` item in `results.json`.
+- [ ] The paper's method is a Python or R package in `<id>/package/`, in the language the kickoff named or by the default rule, with the choice and its reason in the package README; or the `package` item is `not_attempted` because the paper has no reusable method.
+- [ ] The pipeline calls the package for the method; there is no second copy of the method's code.
+- [ ] The install command is in the package README and the tutorial: `pip install "git+https://github.com/<owner>/<repo>#subdirectory=<id>/package"` (Python) or `remotes::install_github("<owner>/<repo>/<id>/package")` (R).
+- [ ] A port is checked against the authors' code on its free runtime; where only proprietary software runs it, against the paper, with the `port` item `not_attempted` (`proprietary_software`) and the README saying so. No authors' source is in the package.
+- [ ] The example data are 1 MB or less, licensed for redistribution, and the data README says where the input and the expected output come from. The expected output does not come from the package itself.
+- [ ] The tutorial shows install, the example input, a run through the API (and the command line in Python), and the comparison with the expected output. Its outputs were produced by running it (`check_package.py --write`, or `R CMD build` for the vignette), and `TUTORIAL.md` was generated from it.
+- [ ] `check_package.py <id>/package` (Python) or the R steps (R) pass in CI, and the result is the `package` item in `results.json`.
 
 ## Pages and docs
 
@@ -64,7 +65,7 @@ Check every line on the pull request's head commit. Each one is here because a p
 <One line per non-exact item: the cause and whether it is explained or open, with what was ruled out.>
 
 ### Package
-`pip install "git+https://github.com/<owner>/<repo>#subdirectory=<id>/package"`; tutorial: `<id>/package/tutorial/TUTORIAL.md`. <Or: no reusable method, and why.>
+<Python or R, and why.> `<install command>`; tutorial: `<id>/package/tutorial/TUTORIAL.md`. <Or: no reusable method, and why.>
 
 ### Run
 `nextflow run <id>/figure-reproduction/main.nf --outdir results` (<minutes> min on <machine>). CI: <workflow name>, <minutes> min.

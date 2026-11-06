@@ -11,7 +11,7 @@ Reproduce <PMCID> (<DOI or URL>) with the paper2repro skill. Follow its definiti
 Work on branch <pmcid>-<short-name> and open one pull request at the end.
 ```
 
-Add anything the person already knows (a mirror for the supplements, figures to skip), but nothing that a rerun would not have. Every later message the person sends counts as an intervention in the ledger, and that count is the measure of how close to one shot the run came.
+Add anything the person already knows (a mirror for the supplements, figures to skip, `Package language: python` or `r`), but nothing that a rerun would not have. Every later message the person sends counts as an intervention in the ledger, and that count is the measure of how close to one shot the run came.
 
 ## Writing the ledger
 

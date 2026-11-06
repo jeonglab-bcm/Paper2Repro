@@ -36,7 +36,7 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
 
 Give printed values as strings (`"0.69"`, `"277.37"`) so `{"printed": true}` knows their precision: half a unit in the last printed digit.
 
-The `package` item is a `code_check` whose `check` comes from the `check_package.py --json` report: `passed` and its `detail` line. See [package-and-tutorial.md](package-and-tutorial.md).
+The `package` item is a `code_check` whose `check` comes from the `check_package.py --json` report (Python: `passed` and its `detail` line) or the R steps (R). See [package-and-tutorial.md](package-and-tutorial.md).
 
 ## Verdict rules
 

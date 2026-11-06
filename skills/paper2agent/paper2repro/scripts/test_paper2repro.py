@@ -170,6 +170,13 @@ def main():
         rc, out = run("check_package.py", copy, "--layout-only")
         if rc == 0 or "data/README.md" not in out or "TUTORIAL.md matches" not in out:
             failures.append(f"check_package.py should catch missing data provenance and a hand-edited TUTORIAL.md: {out}")
+        rpkg = os.path.join(tmp, "rpkg")
+        os.makedirs(rpkg)
+        with open(os.path.join(rpkg, "DESCRIPTION"), "w") as f:
+            f.write("Package: peakfit\nVersion: 0.1.0\n")
+        rc, out = run("check_package.py", rpkg, "--layout-only")
+        if rc != 2 or "R package" not in out:
+            failures.append(f"check_package.py should stop on an R package with exit code 2: {rc} {out}")
 
     for f in failures:
         print("FAIL", f)
