@@ -77,7 +77,7 @@ There is no R template yet. Follow the layout of a standard R package:
 └── tutorial/                      TUTORIAL.md and its figures, rendered from the vignette; do not edit
 ```
 
-Install: `remotes::install_github("<owner>/<repo>/<id>/package")` or `pak::pak("<owner>/<repo>/<id>/package")`. Both take the `owner/repo/subdir` form. With a `biocViews:` field in DESCRIPTION, remotes treats the package as a Bioconductor package and installs its Bioconductor dependencies.
+Install: `remotes::install_github("<owner>/<repo>/<id>/package")` or `pak::pak("<owner>/<repo>/<id>/package")`. Both take the `owner/repo/subdir` form. With a `biocViews:` field in DESCRIPTION, remotes treats the package as a Bioconductor package and installs its Bioconductor dependencies; without it, remotes stops with "dependency ... is not available". pak finds Bioconductor dependencies either way. pak resolves GitHub packages through GitHub's GraphQL API, so it can fail where that API is blocked; remotes needs only the REST API.
 
 ## Name, licence and citation
 
