@@ -116,6 +116,68 @@ def main():
         if led.get("tokens", {}).get("output") != 9:
             failures.append(f"session_ledger.py should keep the last usage of a message: {led.get('tokens')}")
 
+        # check_package.py: notebook comparison, TUTORIAL.md rendering, and the template's layout.
+        sys.path.insert(0, HERE)
+        import check_package as cp
+        if not cp.same_text("rate 0.6931471805599453\n", "rate 0.6931471805599452"):
+            failures.append("check_package.same_text should allow rounding-level differences")
+        for a, b in (("rate 0.6931", "rate 0.6932"), ("4 of 4 wells", "3 of 4 wells"), ("A1 ok", "A2 ok")):
+            if cp.same_text(a, b):
+                failures.append(f"check_package.same_text accepted {a!r} vs {b!r}")
+
+        def nb(*cells):
+            return {"nbformat": 4, "cells": [
+                {"cell_type": "code", "source": src, "metadata": {"tags": tags}, "execution_count": 1,
+                 "outputs": [{"output_type": "stream", "name": "stdout", "text": out}] if out else []}
+                for src, out, tags in cells]}
+        committed = nb(("print(x)", "x = 1.0\n", []), ("print(t)", "took 3.1 s\n", ["nondeterministic"]))
+        compared, skipped, problems = cp.compare_notebooks(committed, nb(("print(x)", "x = 1.0\n", []), ("print(t)", "took 2.7 s\n", [])))
+        if (compared, skipped, problems) != (1, 1, []):
+            failures.append(f"compare_notebooks on an equal run: {compared}, {skipped}, {problems}")
+        _, _, problems = cp.compare_notebooks(committed, nb(("print(x)", "x = 1.5\n", []), ("print(t)", "", [])))
+        if len(problems) != 1:
+            failures.append(f"compare_notebooks should report one changed output: {problems}")
+        broken = nb(("print(x)", "", []), ("print(t)", "", []))
+        broken["cells"][0]["outputs"] = [{"output_type": "error", "ename": "NameError", "evalue": "x", "traceback": []}]
+        _, _, problems = cp.compare_notebooks(committed, broken)
+        if not any("NameError" in p for p in problems):
+            failures.append(f"compare_notebooks should report an error output: {problems}")
+
+        png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        rendered = {"cells": [
+            {"cell_type": "markdown", "source": ["# Title\n", "Text."]},
+            {"cell_type": "code", "source": "plot()", "outputs": [
+                {"output_type": "stream", "name": "stdout", "text": "ok\n"},
+                {"output_type": "display_data", "data": {"image/png": png, "text/plain": "<Figure>"}}]}]}
+        text, files = cp.render_markdown(rendered)
+        for want in ("# Title\nText.", "```python\nplot()\n```", "```text\nok\n```", "](TUTORIAL_files/cell-02-1.png)"):
+            if want not in text:
+                failures.append(f"render_markdown output lacks {want!r}")
+        if "<Figure>" in text or list(files) != ["cell-02-1.png"] or not files["cell-02-1.png"].startswith(b"\x89PNG"):
+            failures.append(f"render_markdown images: {list(files)}")
+
+        template = os.path.join(HERE, "..", "assets", "package-template")
+        rc, out = run("check_package.py", template, "--layout-only")
+        if rc != 0:
+            failures.append(f"the package template should pass --layout-only (stale tutorial? run --write): {out}")
+        import shutil
+        copy = os.path.join(tmp, "pkg")
+        shutil.copytree(template, copy)
+        os.remove(os.path.join(copy, "src", "example_method", "data", "README.md"))
+        md = os.path.join(copy, "tutorial", "TUTORIAL.md")
+        with open(md, "a") as f:
+            f.write("\nedited by hand\n")
+        rc, out = run("check_package.py", copy, "--layout-only")
+        if rc == 0 or "data/README.md" not in out or "TUTORIAL.md matches" not in out:
+            failures.append(f"check_package.py should catch missing data provenance and a hand-edited TUTORIAL.md: {out}")
+        rpkg = os.path.join(tmp, "rpkg")
+        os.makedirs(rpkg)
+        with open(os.path.join(rpkg, "DESCRIPTION"), "w") as f:
+            f.write("Package: peakfit\nVersion: 0.1.0\n")
+        rc, out = run("check_package.py", rpkg, "--layout-only")
+        if rc != 2 or "R package" not in out:
+            failures.append(f"check_package.py should stop on an R package with exit code 2: {rc} {out}")
+
     for f in failures:
         print("FAIL", f)
     print("all tests passed" if not failures else f"{len(failures)} failures")
