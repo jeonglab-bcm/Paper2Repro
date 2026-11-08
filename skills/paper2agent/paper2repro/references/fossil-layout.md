@@ -18,10 +18,15 @@ How a paper sits in `jeonglab-bcm/fossil`. Read `README.md` and `design.md` too;
 │   │                              check_reproduction.py, build_page.py, page_template.html
 │   ├── published/                 the paper's figures for comparison, with the licence note
 │   └── output/                    fig*_ours.png, fig*_overlay.png, comparison.json, tables.json, report.md
+├── package/                       the method as a Python package (pyproject.toml, src/<name>/ with data/, tests/,
+│                                  tutorial/) or an R package (DESCRIPTION, R/, inst/extdata/, tests/testthat/,
+│                                  vignettes/tutorial.Rmd, tutorial/); see package-and-tutorial.md
 └── <code>-implementation-analysis/   when the paper ships code: README and executable checks
 ```
 
 Git-ignored and kept local: `<PMCID>/sources/` (paper, supplements, authors' code), `<PMCID>/<name>-paper/` (the Paper2Skill reading package), `<PMCID>/paper-review/`, `<PMCID>/staging/`, and any virtual environment. Add these lines to `.gitignore` in the same pull request.
+
+Install a paper's package with `pip install "git+https://github.com/jeonglab-bcm/fossil#subdirectory=<PMCID>/package"` (Python) or `remotes::install_github("jeonglab-bcm/fossil/<PMCID>/package")` (R).
 
 ## Licences
 
@@ -31,7 +36,7 @@ Never commit the paper, its supplements or the authors' code. Commit the publish
 
 - `site/<PMCID>/index.html`: the results page, written by `build_page.py` to `results/site/index.html` and copied into `site/<PMCID>/`. Each figure station shows published and ours (side by side, swipe, blink, overlay, difference), the scores, and a stamp from `results.json`.
 - `site/<PMCID>/implementation.html`: the code-analysis page, when there is one.
-- `site/index.html`: one table row per paper with Published and Analyzed dates, the paper (PMC ID, linked title, authors and journal, links to Results, Code analysis and GitHub), "What we lost", "What we recovered" (links to reusable code), and the Verdict stamp with an optional short note. The front page names no problems found in a paper; those belong on its own pages.
+- `site/index.html`: one table row per paper with Published and Analyzed dates, the paper (PMC ID, linked title, authors and journal, links to Results, Code analysis and GitHub), "What we lost", "What we recovered" (links to reusable code and to the package tutorial, `<PMCID>/package/tutorial/TUTORIAL.md`), and the Verdict stamp with an optional short note. The front page names no problems found in a paper; those belong on its own pages.
 - Stamps: `data-v` `agrees`, `partly`, `differs` or `running`; never red or amber. Map verdicts as in results-json.md.
 - Voice: short, plain, dated sentences ("Fig. 5 came back the same."); no dashes, no middle-dot strings, no methods pitch.
 - The Pages workflow deploys `site/` on push to `main`.

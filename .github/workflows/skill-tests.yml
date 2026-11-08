@@ -32,6 +32,9 @@ jobs:
       - name: Paper2Repro self-test (results.json checker, run comparison, ledger)
         run: uv run --with pillow python skills/paper2agent/paper2repro/scripts/test_paper2repro.py
 
+      - name: Package check on the template (wheel, fresh install, tests, tutorial rerun)
+        run: python3 skills/paper2agent/paper2repro/scripts/check_package.py skills/paper2agent/paper2repro/assets/package-template
+
       - name: Regression harness tests (scorer and skill blinding)
         run: python3 tests/skill-regression/test_score.py
 
