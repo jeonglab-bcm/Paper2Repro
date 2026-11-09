@@ -1,0 +1,54 @@
+{
+  "schema": "paper2fossil/candidate/v1",
+  "_note": "Worked example rebuilt from fossil issue #22 (PMC4331676). The ids and duplicates blocks show the paper as it stood before #22 was opened; today check_duplicates.py finds #22, so this paper would be refused.",
+  "from_catalog": true,
+  "paper": {
+    "pmcid": "PMC4331676",
+    "pmid": "25708928",
+    "doi": "10.1186/1752-0509-9-S1-S10",
+    "title": "Identifying DNA-binding proteins by combining support vector machine and PSSM distance transformation.",
+    "short": "DNA-binding proteins by SVM and PSSM distance transformation",
+    "authors_short": "Xu et al.",
+    "year": 2015,
+    "citation": "Xu R, Zhou J, Wang H, He Y, Wang X, Liu B. Identifying DNA-binding proteins by combining support vector machine and PSSM distance transformation. *BMC Systems Biology* 9(Suppl 1):S10 (2015).",
+    "rcr": 2.438
+  },
+  "ids": {
+    "status": "ok",
+    "pmcid": "PMC4331676",
+    "paper": {"pmcid": "PMC4331676", "pmid": "25708928", "doi": "10.1186/1752-0509-9-s1-s10", "open_access": true, "in_pmc": true},
+    "messages": ["All identifiers name Xu R et al. 2015: Identifying DNA-binding proteins by combining support vector machine and PSSM distance transformation. [PMC4331676, doi:10.1186/1752-0509-9-s1-s10]"]
+  },
+  "duplicates": {"status": "none_found", "pmcid": "PMC4331676", "repo": "jeonglab-bcm/fossil", "found": [], "remote_checked": true},
+  "software": {
+    "status": "lost",
+    "summary": "The PSSM-DT web server answers 503, and no code was released. The lab's later BioSeq-Analysis2.0 has a \"PSSM-DT\" mode, which is a reimplementation, not the lost code. It is useful for checking the feature definition.",
+    "evidence": [
+      {"where": "PSSM-DT web server (the paper's only software link)", "finding": "answers 503; Wayback capture exists", "checked": "2026-10-28"},
+      {"where": "CRAN, Bioconductor, PyPI, bio.tools", "finding": "no entry named PSSM-DT", "checked": "2026-10-28"},
+      {"where": "BioSeq-Analysis2.0 (same lab)", "finding": "has a PSSM-DT feature mode: a later reimplementation, not the paper's code", "checked": "2026-10-28"}
+    ]
+  },
+  "data_status": "complete",
+  "validate": [
+    {"item": "Figure 1", "published": "Accuracy and MCC against the lag LG (5-fold CV); best at LG = 5"},
+    {"item": "Table 1", "published": "Jackknife on the benchmark (525 DNA-binding, 550 non-binding chains): PSSM-DT SN 81.91, SP 78.00, AUC 86.50; reported ACC 79.96%, MCC 0.622. Also PSSM-DDT and PSSM-SDT"},
+    {"item": "Table 2 and Figure 3", "published": "PSSM-DT against four other PSSM encodings (AvePscore-20, AvePscore-400, Pscore-100, ACC): about 6 points more accuracy and 5 points more AUC"},
+    {"item": "Table 3 and Figure 4", "published": "Against reimplemented DNAbinder, DNA-Prot and iDNA-Prot"},
+    {"item": "Table 4 and Figure 5", "published": "PDB186 independent test: ACC 80.00%, MCC 0.647, AUC 87.4%, against DBPPred 76.9% / 0.538 / 79.1%"},
+    {"item": "Figure 2", "published": "Discriminant weights: the most informative pairs are (R,R), (R,P), (P,R) and (A,R)"}
+  ],
+  "validate_notes": "**Self-consistency:** the paper's reported accuracy and MCC do not follow from its own sensitivity and specificity. Compare SN, SP and AUC first, and report which numbers hold. Figure 6 is a screenshot of the web server, not a result.",
+  "inputs": [
+    "The benchmark is in the PMC supplement PDF (`-S1.pdf`). `pdftotext -layout` gives all 1,075 sequences.",
+    "PDB186 and the comparator predictions come from Lou et al. 2014 (PLoS One, Dataset S2 and Information S1). The comparator rows of Table 4 can be recomputed exactly from them."
+  ],
+  "gaps": [
+    "PSI-BLAST profiles must be rebuilt against today's NCBI nr (about 400 GB; the 2014 nr is not archived). UniRef 2014_01 (22 GB) is a time-matched alternative.",
+    "The PSSM scaling, feature scaling, C/γ grid and fold assignment are not stated.",
+    "The supplement has defects. 7 \"proteins\" are DNA strands, 5 negatives contain X, 28 negatives have no chain letter, and one sequence has a stray \"23\" from the PDF. Handle each explicitly.",
+    "The independent-test filter (\"CD-HIT at 25%\") cannot be run as stated, because cd-hit's lowest threshold is 40%."
+  ],
+  "effort": "4–5 days after the profiles are built.",
+  "plan": "### Inventory\n\n| Item | Kind | Regenerable | Inputs | Why |\n| --- | --- | --- | --- | --- |\n| Figure 1 | figure | approximate | benchmark + PSI-BLAST profiles | profiles rebuilt on today's nr; fold assignment unstated |\n| Table 1 | table | approximate | benchmark + profiles | as above; C/γ grid unstated |\n| Table 2, Figure 3 | table, figure | approximate | benchmark + profiles | four comparator encodings are defined in the text |\n| Table 3, Figure 4 | table, figure | approximate | benchmark + profiles | comparators reimplemented by the authors, not released |\n| Table 4, Figure 5 | table, figure | approximate | PDB186 + Lou et al. 2014 predictions | comparator rows exact; PSSM-DT rows depend on profiles |\n| Figure 2 | figure | approximate | trained model | depends on Table 1 model |\n| Figure 6 | screenshot | not-a-result | – | web server screenshot |\n\n### Steps\n\n1. Extract the 1,075 benchmark sequences from the supplement PDF and fix the listed defects; record each fix.\n2. Build PSI-BLAST profiles against UniRef 2014_01 with the settings the paper gives, recording any we choose; keep today's nr as a sensitivity run.\n3. Implement PSSM-DT, PSSM-DDT and PSSM-SDT from the Methods equations; check LG = 5 gives the stated feature length.\n4. Jackknife SVM over a C/γ grid (the grid is not stated; record ours); report SN, SP and AUC before ACC and MCC.\n5. Recompute Table 4's comparator rows from Lou et al. 2014; then run PSSM-DT on PDB186.\n\n### Risks\n\n- Profiles from a different database version shift every number; expect agreement in trend, not to two decimals.\n- The reported ACC/MCC are internally inconsistent; decide up front which numbers are the target."
+}

@@ -63,6 +63,26 @@ Work locally only. Do not create repositories, push or deploy a site.
 
 The skill reads the paper's copyright line and every data license before it plans the output. It commits only the published figures that the comparison needs and asks before it publishes any paper material.
 
+## 🦴 Nominate a Paper to fossil
+
+[Paper2Fossil](skills/paper2agent/paper2fossil/SKILL.md) finds the papers that Paper2Repro reproduces. Give it a paper, or describe the kind you want. It checks that the paper's software is really lost and its data survive, writes a reproduction plan, and, once you approve the draft, opens one issue in [jeonglab-bcm/fossil](https://github.com/jeonglab-bcm/fossil/issues) for someone to claim.
+
+```text
+/paper2agent Nominate PMC2262056 to fossil.
+```
+
+```text
+/paper2agent Find a well-cited 2004–2015 paper on protein subcellular localization whose
+software is lost, and propose it to fossil.
+```
+
+- **A description is enough.** `find_candidates.py` searches fossil's availability audit (7,080 papers, already checked) and then Europe PMC (open-access methods papers). It shows a shortlist, and you pick.
+- **Identifiers are checked against each other.** `resolve_ids.py` looks up every PMCID, DOI and PMID you give, and stops if they name different papers, if the title doesn't match, or if the paper isn't open access in PMC.
+- **No duplicates, no moved software.** `check_duplicates.py` searches fossil's folders, plans, issues and pull requests, and `check_software.py` collects evidence from the paper's links, the Wayback Machine, registries and GitHub. A paper whose code moved to a live home isn't nominated.
+- **The issue is generated, not typed.** `render_issue.py` builds the issue in fossil's layout from `candidate.json`: the paper, software status, what to validate, inputs, known gaps, effort, the full plan and the search evidence. It refuses to render if any check failed, and posts only with `--post`.
+
+Posting needs [`gh`](https://cli.github.com/) logged in, or `GITHUB_TOKEN` set with permission to open issues in fossil.
+
 <a id="installation"></a>
 
 ## ⚙️ Installation & Setup
@@ -72,6 +92,7 @@ The skill reads the paper's copyright line and every data license before it plan
 - **Claude Code** with skill support, shell access and subagents. See the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
 - **Python 3.11+ and [uv](https://docs.astral.sh/uv/)** for the helper scripts.
 - **Git.**
+- **[`gh`](https://cli.github.com/) or a `GITHUB_TOKEN`**, only for opening fossil issues with Paper2Fossil.
 - **The paper's own toolchain**, as each paper needs. The worked example and CI use:
   - R (for papers whose figures were drawn in R)
   - Java 21 and [Nextflow](https://www.nextflow.io/) for the pipeline
@@ -193,7 +214,7 @@ It writes to `--out`:
 
 | Workflow | Runs | Checks |
 | --- | --- | --- |
-| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
+| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), Paper2Fossil self-test (offline), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
 Run the fast tests locally:
@@ -208,6 +229,10 @@ uv run --with pillow python skills/paper2agent/paper2repro/scripts/test_paper2re
 
 ```bash
 python3 skills/paper2agent/paper2repro/scripts/check_package.py skills/paper2agent/paper2repro/assets/package-template
+```
+
+```bash
+python3 skills/paper2agent/paper2fossil/scripts/test_paper2fossil.py
 ```
 
 ```bash
