@@ -32,7 +32,7 @@ import common
 SCHEMA = "paper2fossil/candidate/v1"
 SOFTWARE_OK = {"lost": "lost", "partly_found": "partly found"}
 MAX_BODY = 65000  # GitHub rejects issue bodies over 65,536 characters
-SKILL_URL = "https://github.com/jeonglab-bcm/Paper2Repro/blob/main/skills/paper2agent"
+SKILL_URL = "https://github.com/jeonglab-bcm/Paper2Repro/blob/{ref}/skills/paper2agent"
 
 
 def errors_of(c):
@@ -98,8 +98,9 @@ def bullets(xs):
     return "\n".join(f"- {x}" for x in xs)
 
 
-def render(c):
+def render(c, skill_ref="main"):
     p, sw = c["paper"], c["software"]
+    skills = SKILL_URL.format(ref=skill_ref)
     pmcid = common.normalize_pmcid(p["pmcid"])
     doi = re.sub(r"^(?:https?://)?(?:dx\.)?doi\.org/|^doi:\s*", "", p["doi"].strip(), flags=re.I)
     title = f"Reproduce {pmcid}: {p['short']} ({p['authors_short']} {p['year']})"
@@ -108,7 +109,7 @@ def render(c):
 
     out = [
         "> [!WARNING]",
-        f"> **AI-generated task spec.** Claude Code wrote this with the [Paper2Fossil skill]({SKILL_URL}/paper2fossil/SKILL.md) "
+        f"> **AI-generated task spec.** Claude Code wrote this with the [Paper2Fossil skill]({skills}/paper2fossil/SKILL.md) "
         f"from the paper's full text{source}. Nothing was run. Before you start, read the paper and confirm the target is right: "
         "the PMCID, the title, the figures and tables, and the numbers below.",
         "",
@@ -151,7 +152,7 @@ def render(c):
         "## How to take this paper",
         "",
         "1. Read the paper on PMC and check this spec against it. The spec can be wrong; say so in a comment.",
-        f"2. Use the [Paper2Repro skill]({SKILL_URL}/paper2repro/SKILL.md) and follow its workflow and definition of done.",
+        f"2. Use the [Paper2Repro skill]({skills}/paper2repro/SKILL.md) and follow its workflow and definition of done.",
         f"3. Open one pull request with the work in a folder named `{pmcid}/`, laid out like the existing papers, "
         "and put `Closes #<this issue>` in its body.",
         "4. Don't commit the paper, its supplements or downloaded datasets. Commit only the published figures you "
@@ -188,6 +189,8 @@ def main(argv=None):
     ap.add_argument("--out", help="write the draft (title on the first line) here")
     ap.add_argument("--post", action="store_true", help="open the issue; only after the user approved the draft")
     ap.add_argument("--repo", default=common.FOSSIL_REPO)
+    ap.add_argument("--skill-ref", default="main",
+                    help="Paper2Repro branch or tag the skill links point to (default %(default)s)")
     a = ap.parse_args(argv)
     with open(a.candidate) as f:
         c = json.load(f)
@@ -196,7 +199,7 @@ def main(argv=None):
         print("Not rendered:", file=sys.stderr)
         print("\n".join(f"  - {e}" for e in errs), file=sys.stderr)
         return 1
-    title, body = render(c)
+    title, body = render(c, a.skill_ref)
     if len(body) > MAX_BODY:
         print(f"Body is {len(body)} characters; GitHub allows {MAX_BODY}. Shorten the plan.", file=sys.stderr)
         return 1

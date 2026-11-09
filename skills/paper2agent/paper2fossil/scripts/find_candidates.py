@@ -79,12 +79,13 @@ def search_catalog(rows, query, years, min_rcr):
             continue
         title = (r.get("title") or "").lower()
         other = " ".join(r.get(k) or "" for k in ("mesh_major", "oa_keywords", "oa_topic", "journal")).lower()
-        hits = sum(3 * (t in title) + (t in other) for t in qt)
+        hits = sum(3 if re.search(rf"\b{re.escape(t)}", title) else (1 if re.search(rf"\b{re.escape(t)}", other) else 0) for t in qt)
         if qt and not hits:
             continue
-        # Confirmed-lost papers first, then readiness, then match strength and citations.
+        # Topic match first (a ready paper on the wrong topic is no candidate), then confirmed-lost,
+        # then readiness and citations. Matches are counted per distinct term, title words weighing more.
         confirmed = 2 if tags & {"code:not-found-elsewhere", "code:partly-found"} else (1 if tags & {"code:lost", "code:lost-archived"} else 0)
-        score = (confirmed, READINESS.get(r.get("reproduction_readiness"), 0), hits, rcr or 0)
+        score = (hits, confirmed, READINESS.get(r.get("reproduction_readiness"), 0), rcr or 0)
         out.append((score, {
             "source": "catalog", "pmcid": r["pmcid"], "pmid": r.get("pmid"), "doi": common.normalize_doi(r.get("doi") or ""),
             "year": y, "title": r.get("title"), "journal": r.get("journal"), "rcr": rcr, "tier": r.get("tier"),

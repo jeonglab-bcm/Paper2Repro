@@ -128,7 +128,8 @@ def test_catalog():
     expect("PMC6" not in got, "a paper whose code is live must never be a candidate")
     expect("PMC4" not in got, "years outside the range must be left out")
     expect("PMC5" not in got, "RCR below the minimum must be left out")
-    expect(got[:2] == ["PMC1", "PMC7"], f"confirmed-lost and ready papers first: {got}")
+    expect(got[:2] == ["PMC1", "PMC7"], f"best topic match first, then confirmed-lost: {got}")
+    expect(got.index("PMC3") > got.index("PMC7"), f"a weaker topic match ranks lower even when cited more: {got}")
     expect("PMC3" in got, f"keyword match in the title should keep PMC3 (protein): {got}")
     expect(find_candidates.search_catalog(rows, "zebrafish", (2004, 2015), 0) == [], "no keyword match, no candidates")
     q = find_candidates.web_query("flux balance", (2004, 2015))
@@ -171,6 +172,9 @@ def test_render():
                     "https://pmc.ncbi.nlm.nih.gov/articles/PMC4331676/", "doi:10.1186/1752-0509-9-S1-S10", "Closes #<this issue>"):
         expect(section in body, f"rendered body lacks {section!r}")
     expect("Part of #" not in body, "issues have no parent")
+    expect("/blob/main/skills/paper2agent/paper2fossil/SKILL.md" in body, "skill links default to main")
+    _, body_ref = render_issue.render(c, "paper2fossil")
+    expect("/blob/paper2fossil/skills/paper2agent/paper2repro/SKILL.md" in body_ref, "--skill-ref changes the links")
     expect("| Table 1 | Jackknife on the benchmark" in body, "validate rows render as a table")
 
     broken = {
