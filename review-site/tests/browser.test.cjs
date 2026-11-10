@@ -90,28 +90,59 @@ async function small(browser, base) {
     assert.equal(await page.locator('details.file[data-path$="check_results.py"]').count(), 0);
   });
 
-  await step("decisions fold, count, survive a reload and show on the first page", async () => {
+  await step("a verdict of your own and a comment are kept, counted and shown on the figure", async () => {
     const cards = page.locator(".card");
-    await cards.nth(0).locator('button[data-d="ok"]').click();
-    assert.equal(await cards.nth(0).locator(".lead").isVisible(), false);
-    await cards.nth(1).locator('button[data-d="work"]').click();
-    await page.keyboard.type("Say which release.");
-    assert.equal(await page.locator(".bar .done").textContent(), "2");
-    await page.locator("#i-table1 .why").click(); // an anchor: the page stays, the folded card opens
-    assert.equal(await cards.nth(0).locator(".decide").isVisible(), true);
+    const cause = cards.nth(0);
+    assert.match(await cause.locator(".ask").textContent(), /The pull request says Differs\. Your verdict:/);
+    await cause.locator('button[data-v="agrees"]').click();
+    assert.equal(await cause.locator(".state").textContent(), "You say: Agrees");
+    assert.equal(await cause.locator(".lead").isVisible(), true); // nothing folds away
+    await cause.locator("textarea").fill("The curve agrees within noise.");
+    assert.equal(await page.locator("#i-table1 .mine").textContent(), "You say: Agrees");
+    assert.equal(await page.locator("#i-fig1\\.curve .mine").textContent(), "You say: Agrees");
+    await cards.nth(1).locator('button[data-v="no"]').click();
+    await cards.nth(1).locator("textarea").fill("Say which release.");
+    await cards.nth(2).locator('button[data-v="ok"]').click();
+    assert.equal(await cards.nth(2).locator(".state").textContent(), "OK");
+    assert.equal(await page.locator(".bar .done").textContent(), "3");
+    await page.locator("#i-table1 .why").click(); // an anchor: the page stays as it is
     assert.equal(new URL(page.url()).search, "?r=o/r/pull/7");
+    assert.equal(await cause.locator("textarea").inputValue(), "The curve agrees within noise.");
     await page.locator(".copy").click();
     await page.waitForTimeout(150);
     const text = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
-    assert.match(text, /\*\*Needs work \(1\)\*\*\n- \*\*Choices the paper does not give\*\*: Say which release\./);
+    assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1 · Table 1\*\*: Differs → Agrees\. The curve agrees within noise\./);
+    assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Choices the paper does not give\*\*: Say which release\./);
+    assert.match(text, /\*\*Agreed \(1\):\*\* Values the paper prints/);
+    assert.match(text, /\*\*Not decided \(2\)\*\*/);
+    await cause.locator('button[data-v="differs"]').click(); // the same as the pull request
+    assert.equal(await cause.locator(".state").textContent(), "You agree: Differs");
+    assert.equal(await page.locator("#i-table1 .mine").count(), 0);
+    await cause.locator('button[data-v="agrees"]').click();
     await page.reload();
     await page.waitForSelector(".card");
-    assert.equal(await page.locator(".bar .done").textContent(), "2");
+    assert.equal(await page.locator(".bar .done").textContent(), "3");
+    assert.equal(await page.locator(".card").nth(0).locator(".state").textContent(), "You say: Agrees");
     await page.locator(".back").click();
     await page.waitForSelector(".rcard .progress b");
-    assert.equal(await page.locator(".rcard .progress").textContent(), "2 of 5 decided");
+    assert.equal(await page.locator(".rcard .progress").textContent(), "3 of 5 decided");
     assert.match(await page.locator(".recent").textContent(), /o\/r #7 · PMC1/);
+  });
+
+  await step("a decision saved as Accept or Needs work keeps its comment and asks again", async () => {
+    await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith("rv:o/r:") && JSON.parse(localStorage[k]).v === "ok");
+      localStorage.setItem(key, JSON.stringify({ d: "ok", note: "an old note" }));
+    });
+    await page.locator(".rcard").click();
+    await page.waitForSelector(".card");
+    const old = page.locator(".card").nth(2);
+    assert.equal(await old.locator(".state").textContent(), "");
+    assert.equal(await old.locator("textarea").inputValue(), "an old note");
+    assert.equal(await page.locator(".bar .done").textContent(), "2");
+    await page.locator(".back").click();
+    await page.waitForSelector(".rcard");
   });
 
   await step("the figure can be swiped, blinked and overlaid", async () => {

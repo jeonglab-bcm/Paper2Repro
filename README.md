@@ -146,7 +146,7 @@ The pull request starts with the `check_results.py` table (item, verdict, measur
 
 ## 👀 Reviewing a Reproduction
 
-A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) is a page to paste a pull request or branch link into. It shows the reproduction laid out by the paper: the decisions to make, each figure next to the published one, each table in the paper's shape, and the code of the method only. It is a static site that reads GitHub from the browser; the [Review site](.github/workflows/review-site.yml) workflow publishes it with GitHub Pages.
+A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) is a page to paste a pull request or branch link into. It shows the reproduction laid out by the paper: each figure next to the published one, each table in the paper's shape, then the decisions to make, and the code of the method only. It is a static site that reads GitHub from the browser; the [Review site](.github/workflows/review-site.yml) workflow publishes it with GitHub Pages.
 
 ## 🐍 Package and Tutorial
 

@@ -240,7 +240,7 @@ async function home(repo) {
     const sum = store.get(`rv:sum:${repo}:#${card.dataset.number}`);
     const progress = card.querySelector(".progress");
     if (sum && sum.keys.length) {
-      const done = sum.keys.filter((k) => decision(repo, k).d).length;
+      const done = sum.keys.filter((k) => decision(repo, k).v).length;
       progress.innerHTML = `<b>${done}</b> of <b>${sum.keys.length}</b> decided` + (sum.sha !== card.dataset.sha ? " · changed since you opened it" : "");
       card.classList.add(done === sum.keys.length ? "alldone" : done ? "started" : "seen");
     } else {
@@ -264,76 +264,80 @@ async function home(repo) {
 const dkey = (repo, k) => `rv:${repo}:${k}`;
 const decision = (repo, k) => store.get(dkey(repo, k)) || {};
 
+/** What the reviewer said on a card: {v, note}. v is a verdict, or "ok" / "no"; decisions saved as Accept / Needs work keep their note only. */
+const said = (repo, k) => { const s = decision(repo, k); return { v: s.v || "", note: s.note || "" }; };
+
 function wireReview(review, c, summary) {
   const repo = review.repo;
   const cards = [...app.querySelectorAll(".card")];
+  const label = (v) => core.VERDICT_LABEL[v] || { ok: "OK", no: "Not OK" }[v] || "";
   const grow = (ta) => { ta.style.height = "auto"; ta.style.height = Math.max(36, ta.scrollHeight + 2) + "px"; };
   const paint = (card) => {
-    const s = decision(repo, card.dataset.key);
-    card.dataset.d = s.d || "";
-    card.querySelectorAll(".decide button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.d === s.d)));
+    const s = said(repo, card.dataset.key), given = card.dataset.verdict || "";
+    card.dataset.v = s.v;
+    card.dataset.same = String(!!s.v && (s.v === given || s.v === "ok"));
+    card.querySelectorAll(".decide button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === s.v)));
     const ta = card.querySelector("textarea");
-    if (document.activeElement !== ta) { ta.value = s.note || ""; if (ta.value) grow(ta); }
-    card.querySelector(".state").textContent = s.d === "ok" ? "Accepted" : s.d === "work" ? "Needs work" : "";
+    if (document.activeElement !== ta) { ta.value = s.note; if (ta.value) grow(ta); }
+    card.querySelector(".state").textContent = !s.v ? "" : given ? (s.v === given ? `You agree: ${label(s.v)}` : `You say: ${label(s.v)}`) : label(s.v);
+    // the reviewer's verdict also shows on the figures and tables it is about
+    for (const id of JSON.parse(card.dataset.members || "[]")) {
+      const row = document.getElementById("i-" + id);
+      if (!row) continue;
+      row.querySelector(".mine")?.remove();
+      if (s.v && s.v !== given) row.querySelector(".ilabel").insertAdjacentHTML("afterend", `<span class="chip mine">You say: ${core.esc(label(s.v))}</span>`);
+    }
   };
   const progress = () => {
-    app.querySelector(".bar .done").textContent = cards.filter((x) => decision(repo, x.dataset.key).d).length;
+    app.querySelector(".bar .done").textContent = cards.filter((x) => said(repo, x.dataset.key).v).length;
     app.querySelector(".bar .all").textContent = cards.length;
-  };
-  const decide = (card, d) => {
-    const s = decision(repo, card.dataset.key);
-    s.d = s.d === d ? "" : d;
-    store.set(dkey(repo, card.dataset.key), s);
-    card.classList.remove("peek");
-    paint(card);
-    progress();
-    if (s.d === "work") card.querySelector("textarea").focus();
   };
   cards.forEach((card) => {
     paint(card);
-    card.querySelectorAll(".decide button").forEach((b) => b.addEventListener("click", () => decide(card, b.dataset.d)));
+    card.querySelectorAll(".decide button").forEach((b) => b.addEventListener("click", () => {
+      const s = said(repo, card.dataset.key);
+      s.v = s.v === b.dataset.v ? "" : b.dataset.v;
+      store.set(dkey(repo, card.dataset.key), s);
+      paint(card);
+      progress();
+    }));
     const ta = card.querySelector("textarea");
     ta.addEventListener("input", () => {
-      const s = decision(repo, card.dataset.key);
+      const s = said(repo, card.dataset.key);
       s.note = ta.value;
       store.set(dkey(repo, card.dataset.key), s);
       grow(ta);
     });
-    card.querySelector(".chead").addEventListener("click", () => { if (card.dataset.d === "ok") card.classList.toggle("peek"); });
   });
   progress();
-  const reveal = () => {
-    const t = location.hash && document.getElementById(location.hash.slice(1));
-    if (t && t.classList.contains("card")) t.classList.add("peek");
-  };
-  reveal();
-  wireReview.reveal = reveal;
   wireReview.keys = (ev) => {
+    if (ev.key !== "j" && ev.key !== "k") return;
     const at = cards.indexOf(document.activeElement.closest ? document.activeElement.closest(".card") : null);
-    if (ev.key === "j" || ev.key === "k") {
-      const next = at === -1 ? cards[0] : cards[Math.max(0, Math.min(cards.length - 1, at + (ev.key === "j" ? 1 : -1)))];
-      if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center" }); }
-      ev.preventDefault();
-    } else if ((ev.key === "a" || ev.key === "w") && at !== -1) {
-      decide(cards[at], ev.key === "a" ? "ok" : "work");
-      ev.preventDefault();
-    }
+    const next = at === -1 ? cards[0] : cards[Math.max(0, Math.min(cards.length - 1, at + (ev.key === "j" ? 1 : -1)))];
+    if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center" }); }
+    ev.preventDefault();
   };
 
-  // the review as text for GitHub
+  // the review as text for GitHub: what to change first, what is confirmed last
   const reviewText = () => {
     const out = [];
     app.querySelectorAll(".paper").forEach((p) => {
       out.push(`### Review of ${p.dataset.paper || review.label} at ${review.sha.slice(0, 7)} (${review.label})`, "");
-      const groups = { work: [], ok: [], "": [] };
+      const change = [], notOk = [], noted = [], fine = [], open = [];
       p.querySelectorAll(".card").forEach((x) => {
-        const s = decision(repo, x.dataset.key);
-        groups[s.d || ""].push({ title: x.dataset.title, note: (s.note || "").trim() });
+        const s = said(repo, x.dataset.key), given = x.dataset.verdict || "", note = s.note.trim().replace(/\s*\n\s*/g, " ");
+        const title = `**${x.dataset.title}**`;
+        if (given && s.v && s.v !== given) change.push(`- ${title}: ${label(given)} → ${label(s.v)}.${note ? " " + note : ""}`);
+        else if (s.v === "no") notOk.push(`- ${title}${note ? ": " + note : ""}`);
+        else if (s.v && note) noted.push(`- ${title}${given ? ` (${label(given)})` : ""}: ${note}`);
+        else if (s.v) fine.push(x.dataset.title + (given ? ` (${label(given)})` : ""));
+        else open.push(`- ${title}${note ? ": " + note : ""}`);
       });
-      for (const [title, rows] of [["Needs work", groups.work], ["Accepted", groups.ok], ["Not decided", groups[""]]]) {
-        if (!rows.length) continue;
-        out.push(`**${title} (${rows.length})**`, ...rows.map((r) => `- **${r.title}**` + (r.note ? ": " + r.note.replace(/\s*\n\s*/g, " ") : "")), "");
+      for (const [title, rows] of [["Verdicts to change", change], ["Not OK", notOk], ["Agreed, with a comment", noted]]) {
+        if (rows.length) out.push(`**${title} (${rows.length})**`, ...rows, "");
       }
+      if (fine.length) out.push(`**Agreed (${fine.length}):** ${fine.join("; ")}`, "");
+      if (open.length) out.push(`**Not decided (${open.length})**`, ...open, "");
     });
     out.push(`_From the review page: ${location.href.split("#")[0]}_`);
     return out.join("\n");
@@ -494,12 +498,10 @@ document.addEventListener("click", (ev) => {
   if (!a || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;
   const href = a.getAttribute("href");
   if (href === "./" || href.startsWith("?r=")) { ev.preventDefault(); go(href); return; }
-  if (href.startsWith("#d-")) document.getElementById(href.slice(1))?.classList.add("peek"); // a folded decision opens
 });
 document.addEventListener("keydown", (ev) => {
   if (ev.metaKey || ev.ctrlKey || ev.altKey || /^(TEXTAREA|INPUT|SELECT)$/.test(ev.target.tagName) || !app.querySelector(".card")) return;
   wireReview.keys?.(ev);
 });
-window.addEventListener("hashchange", () => wireReview.reveal?.());
 window.addEventListener("popstate", () => { if (location.search !== shown) render(); });
 render();
