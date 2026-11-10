@@ -6,6 +6,7 @@ Check every line on the pull request's head commit. Each one is here because a p
 
 - [ ] `results.json` lists every figure panel, table and quantitative statement of the paper, attempted or not.
 - [ ] `check_results.py <id>/results.json` exits 0: verdicts and summary computed, no missing causes, no untested open causes.
+- [ ] `results.json` has the `skill` block written by `skill_version.py` from the installed skill, and the pipeline's merge step keeps it on a rerun.
 - [ ] Every attempted figure panel has a render (`fig*_ours.png`) and an overlay (`fig*_overlay.png`), listed in its `outputs`. Scoring a panel without drawing it is not enough.
 - [ ] Every pixel-scored panel has at least one wrong-input control and, where amplitude or position matters, near-miss controls; the pass mark sits above all of them.
 - [ ] Every constant read off a figure or found by search is an `assumption` with its sensitivity.

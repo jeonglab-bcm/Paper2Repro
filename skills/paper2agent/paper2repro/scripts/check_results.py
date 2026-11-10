@@ -17,6 +17,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 
 SCHEMA = "paper2repro/results/v1"
@@ -33,6 +34,7 @@ CAUSES = {
     "not_a_result", "metric_resolution", "unknown",
 }
 NEEDS_CAUSE = {"partly", "inconclusive", "differs", "not_attempted"}
+SEMVER = r"\d+\.\d+\.\d+"
 
 
 def number(v):
@@ -220,6 +222,12 @@ def main():
     for i in run.get("inputs", []):
         if not i.get("sha256") or not i.get("name"):
             errors.append(f"run.inputs: {i.get('name')!r} needs a name and a sha256")
+
+    skill = data.get("skill") or {}
+    if skill.get("name") != "paper2repro" or not re.fullmatch(SEMVER, str(skill.get("version", ""))):
+        errors.append("skill is missing or has no version: run the installed skill's scripts/skill_version.py on this file")
+    elif skill.get("tag") != f"paper2repro-v{skill['version']}":
+        errors.append(f"skill.tag must be paper2repro-v{skill['version']}")
 
     items = data.get("items") or []
     if not items:

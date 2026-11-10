@@ -11,6 +11,7 @@ and examples that change nothing a reproduction produces.
 
 | Version | Date | Commit on `main` | Pull request | What changed |
 | --- | --- | --- | --- | --- |
+| 0.5.0 | 2026-11-10 | - | #9 | The skill records its release: `scripts/skill_version.py` writes the top-level `skill` block (version, tag, commit, uncommitted changes) into `results.json`, and `check_results.py` requires it. |
 | 0.4.0 | 2026-11-07 | 727d35e | #5 | Package the paper's method as a Python or R package with an executed tutorial; rules for other languages; R install through pak. |
 | 0.3.0 | 2026-11-05 | 0e010bc | #6 | Claims in the paper's text are scored like figures and tables; gaps with several differing inputs. |
 | 0.2.0 | 2026-11-03 | 77e217f | #4 | The fossil version: normalized `results.json` with computed verdicts, its checker, run comparison and the session ledger. |
