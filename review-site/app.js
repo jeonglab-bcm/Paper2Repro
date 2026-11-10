@@ -6,7 +6,6 @@ import * as core from "./core.js";
 const API = "https://api.github.com";
 const RAW = "https://raw.githubusercontent.com";
 const DEFAULT_REPO = document.body.dataset.repo || "";
-const JUDGE = document.body.dataset.judge || ""; // "owner/repo/branch" that holds the AI judge's verdicts
 const app = document.getElementById("app");
 
 const store = {
@@ -86,17 +85,6 @@ async function rawText(c, path) {
   }
 }
 
-/** The AI judge's verdicts for a commit; null when it has not judged it (yet). */
-async function judgeFile(owner, repo, sha) {
-  try {
-    const r = await fetch(`${RAW}/${JUDGE}/judge/${owner}/${repo}/${sha}.json`);
-    const data = r.ok ? await r.json() : null;
-    return data && Array.isArray(data.papers) ? data : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Everything one review page needs, from a parsed link. */
 async function loadReview(link) {
   const { owner, repo } = link;
@@ -140,8 +128,6 @@ async function loadReview(link) {
     if (apiFiles.length >= 300) review.notes.push("GitHub lists only the first 300 changed files of a branch. Open a pull request to see all of them.");
   }
   review.repo = `${owner}/${repo}`;
-  review.judgeOn = !!JUDGE;
-  review.judge = JUDGE ? await judgeFile(owner, repo, review.sha) : null;
   review.files = core.normalizeFiles(apiFiles);
   const c = { owner, repo, sha: review.sha };
   const tree = review.files.filter((f) => f.status !== "D").map((f) => f.path);
@@ -324,21 +310,6 @@ function wireReview(review, c, summary) {
     });
   });
   progress();
-  const take = app.querySelector(".take");
-  const open = () => cards.filter((x) => x.dataset.ai && !said(repo, x.dataset.key).v);
-  const takeLabel = () => { if (take) { const n = open().length; take.hidden = !n; take.textContent = `Use the AI's verdict on ${n} result${n === 1 ? "" : "s"} I have not decided`; } };
-  if (take) {
-    take.addEventListener("click", () => {
-      for (const card of open()) {
-        store.set(dkey(repo, card.dataset.key), { ...said(repo, card.dataset.key), v: card.dataset.ai });
-        paint(card);
-      }
-      progress();
-      takeLabel();
-    });
-    cards.forEach((card) => card.querySelectorAll(".decide button").forEach((b) => b.addEventListener("click", takeLabel)));
-    takeLabel();
-  }
   wireReview.keys = (ev) => {
     if (ev.key !== "j" && ev.key !== "k") return;
     const at = cards.indexOf(document.activeElement.closest ? document.activeElement.closest(".card") : null);
@@ -355,8 +326,8 @@ function wireReview(review, c, summary) {
       const change = [], notOk = [], noted = [], fine = [], open = [];
       p.querySelectorAll(".card").forEach((x) => {
         const s = said(repo, x.dataset.key), given = x.dataset.verdict || "", note = s.note.trim().replace(/\s*\n\s*/g, " ");
-        const title = `**${x.dataset.title}**`, ai = x.dataset.ai ? ` (AI judge: ${label(x.dataset.ai)})` : "";
-        if (given && s.v && s.v !== given) change.push(`- ${title}: ${label(given)} → ${label(s.v)}${ai}.${note ? " " + note : ""}`);
+        const title = `**${x.dataset.title}**`;
+        if (given && s.v && s.v !== given) change.push(`- ${title}: ${label(given)} → ${label(s.v)}.${note ? " " + note : ""}`);
         else if (s.v === "no") notOk.push(`- ${title}${note ? ": " + note : ""}`);
         else if (s.v && note) noted.push(`- ${title}${given ? ` (${label(given)})` : ""}: ${note}`);
         else if (s.v) fine.push(x.dataset.title + (given ? ` (${label(given)})` : ""));

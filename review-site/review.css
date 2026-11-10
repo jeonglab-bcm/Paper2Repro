@@ -322,18 +322,3 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .decide button[data-v="no"][aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .decide textarea { flex-basis: 100%; }
 .chip.mine { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-
-/* the AI judge */
-.aitag { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 700; vertical-align: 1px; }
-.ai { margin-top: 12px; padding: 9px 12px; border-radius: 8px; background: var(--soft); font-size: 14px; max-width: 86ch; }
-.ai b { margin-right: 4px; }
-.ai + .decide { margin-top: 10px; }
-.decide button.aipick { position: relative; }
-.decide button.aipick::after { content: "AI"; position: absolute; top: -8px; right: -6px; padding: 0 5px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 10px; font-weight: 700; line-height: 15px; }
-.chip.ai { background: var(--ink); color: var(--bg); font-weight: 600; }
-.judgebar { margin: 0 0 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 14px; }
-.judgebar p { margin: 0; }
-p.judgebar { display: block; }
-.judgebar details { flex-basis: 100%; }
-.guide { margin: 6px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; max-height: 320px; overflow: auto; }
-[hidden] { display: none !important; }
