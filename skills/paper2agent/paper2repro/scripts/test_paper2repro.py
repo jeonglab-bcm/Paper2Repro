@@ -55,6 +55,9 @@ def main():
             "fitted setting without sensitivity": lambda d: item(d, "fig2")["assumptions"][0].pop("sensitivity"),
             "figure without its renders": lambda d: item(d, "fig7").update(outputs=[]),
             "input without a checksum": lambda d: d["run"]["inputs"][0].pop("sha256"),
+            "no skill version": lambda d: d.pop("skill"),
+            "skill version not semver": lambda d: d["skill"].update(version="0.5", tag="paper2repro-v0.5"),
+            "skill tag not its version": lambda d: d["skill"].update(tag="paper2repro-v0.4.0"),
         }
         for name, mutate in broken.items():
             rc, out = results_case(tmp, name.replace(" ", "_"), mutate)
@@ -70,6 +73,27 @@ def main():
         got = item(json.load(open(os.path.join(tmp, "paper_error.json"))), "text.plasma_totals").get("verdict") if rc == 0 else out
         if got != "exact":
             failures.append(f"paper-error exception: {got}")
+
+        # skill_version.py: the block comes from VERSION; it replaces an old one and keeps the rest.
+        version = open(os.path.join(HERE, "..", "VERSION")).read().strip()
+        stamped = os.path.join(tmp, "stamped.json")
+        old = json.load(open(EXAMPLE))
+        old["skill"] = {"name": "paper2repro", "version": "0.0.1"}
+        json.dump(old, open(stamped, "w"))
+        rc, out = run("skill_version.py", stamped)
+        new = json.load(open(stamped)) if rc == 0 else {}
+        skill = new.get("skill", {})
+        if (skill.get("version"), skill.get("tag")) != (version, f"paper2repro-v{version}") or set(skill) != {"name", "version", "tag", "commit", "modified"}:
+            failures.append(f"skill_version.py wrote {skill} ({out[:200]})")
+        keys = list(new)
+        if [k for k in keys if k != "skill"] != [k for k in old if k != "skill"] or keys[keys.index("session") + 1:][:1] != ["skill"] or new.get("items") != old["items"]:
+            failures.append(f"skill_version.py should keep the other fields in order: {list(new)}")
+        import shutil
+        bare = os.path.join(tmp, "bare-skill")
+        shutil.copytree(os.path.join(HERE, ".."), bare, ignore=shutil.ignore_patterns("package-template", "__pycache__"))
+        p = subprocess.run([sys.executable, os.path.join(bare, "scripts", "skill_version.py")], capture_output=True, text=True)
+        if p.returncode != 0 or json.loads(p.stdout or "{}").get("commit") is not None:
+            failures.append(f"skill_version.py outside a git checkout should report commit null: {p.stdout}{p.stderr}")
 
         # compare_runs.py: numbers within tolerance agree, real changes do not.
         a, b = os.path.join(tmp, "fresh"), os.path.join(tmp, "committed")
@@ -160,7 +184,6 @@ def main():
         rc, out = run("check_package.py", template, "--layout-only")
         if rc != 0:
             failures.append(f"the package template should pass --layout-only (stale tutorial? run --write): {out}")
-        import shutil
         copy = os.path.join(tmp, "pkg")
         shutil.copytree(template, copy)
         os.remove(os.path.join(copy, "src", "example_method", "data", "README.md"))

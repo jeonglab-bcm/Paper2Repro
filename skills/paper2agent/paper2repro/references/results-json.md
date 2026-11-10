@@ -11,12 +11,21 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
   "run": {"date": "2026-10-28", "pipeline": "<id>/figure-reproduction/main.nf", "command": "nextflow run ...",
           "inputs": [{"name": "S2.zip", "url": "...", "sha256": "..."}], "environment": {"python": "3.12.7", "numpy": "2.1.3"}},
   "session": {"ledger": "session/ledger.json"},
+  "skill": {"name": "paper2repro", "version": "0.5.0", "tag": "paper2repro-v0.5.0", "commit": "<sha>", "modified": false},
   "items": [ ... ],
   "summary": {"items": 9, "exact": 0, "agrees": 4, "...": 0, "open_causes": 2}
 }
 ```
 
 `summary` and each item's `verdict` are written by `check_results.py --write`. Do not edit them.
+
+`skill` names the Paper2Repro release the session ran, so a reproduction can be traced to the exact instructions behind it. Write it with `scripts/skill_version.py`, run from the installed skill, never by hand:
+
+- `version` and `tag` come from the skill's `VERSION` file. Each release is tagged `paper2repro-v<version>` in the Paper2Repro repository.
+- `commit` is the skill checkout's git commit, or null when the skill is a copy without git (a cloud session, for example).
+- `modified` is true when the skill folder had uncommitted changes, so the version alone does not describe what ran. It is null without git.
+
+`check_results.py` fails when `skill` is missing.
 
 ## Items
 
@@ -81,6 +90,6 @@ Required for `partly`, `inconclusive`, `differs` and `not_attempted`; allowed on
 
 ## Producing the file
 
-Let the pipeline write the numbers. Keep what a person writes (labels, sources, assumptions, causes, controls' names) in a small notes file such as `figure-reproduction/results_notes.json`, and have a pipeline step merge it with the scores from the comparison outputs into `results.json`, then run `check_results.py --write`. That way a rerun updates every score and a stale cause shows up as a failed check, not as a wrong page.
+Let the pipeline write the numbers. Keep what a person writes (labels, sources, assumptions, causes, controls' names) in a small notes file such as `figure-reproduction/results_notes.json`, and have a pipeline step merge it with the scores from the comparison outputs into `results.json`, then run `check_results.py --write`. Stamp the notes file with `skill_version.py <notes file>` in phase 1, and have the merge step copy its `skill` block into `results.json` unchanged, like `session`. A copied `check_results.py` run in CI cannot tell which skill wrote the file, so the block has to travel with the notes. That way a rerun updates every score and a stale cause shows up as a failed check, not as a wrong page.
 
 On the site, map verdicts to the fossil stamps: `exact` and `agrees` to `data-v="agrees"`, `partly` and `inconclusive` to `partly`, `differs` to `differs`; `not_attempted` items are listed with their reason, without a stamp.

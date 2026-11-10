@@ -41,6 +41,13 @@
   "session": {
     "ledger": "session/ledger.json"
   },
+  "skill": {
+    "name": "paper2repro",
+    "version": "0.5.0",
+    "tag": "paper2repro-v0.5.0",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "modified": false
+  },
   "items": [
     {
       "id": "port",
