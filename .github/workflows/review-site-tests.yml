@@ -1,0 +1,32 @@
+name: Review site tests
+
+on:
+  pull_request:
+    paths:
+      - "review-site/**"
+      - ".github/workflows/review-site-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "review-site/**"
+      - ".github/workflows/review-site-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pygments
+        run: pip install pygments==2.21.0
+
+      - name: Rules and a whole site from a small repository
+        run: python3 review-site/tests/test_review_site.py
