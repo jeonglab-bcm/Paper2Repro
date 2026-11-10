@@ -10,7 +10,8 @@ function git(dir, args, text = true) {
 const TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", json: "application/json" };
 
 /** pulls: [{number, title, user: {login}, head: {ref}, updated_at, draft, git}] where git is the local ref of its head. */
-function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBranch = "main", branches = {} }) {
+/** judge: {at: "owner/repo/branch", file(sha) -> the AI judge's saved verdicts for that commit, or null}. */
+function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBranch = "main", branches = {}, judge = null }) {
   const sha = (ref) => git(clone, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
   const filesCache = new Map();
   const state = { calls: 0, rateLimited: false };
@@ -55,6 +56,11 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
     const json = (status, body, headers = {}) => route.fulfill({ status, contentType: "application/json", headers: { ...cors, ...headers }, body: JSON.stringify(body) });
     try {
       if (url.hostname === "raw.githubusercontent.com") {
+        const j = judge && new RegExp(`^/${judge.at}/judge/${owner}/${repo}/([0-9a-f]{40})\\.json$`).exec(url.pathname);
+        if (j) {
+          const body = judge.file(j[1]);
+          return body ? json(200, body) : route.fulfill({ status: 404, headers: cors, body: "404: Not Found" });
+        }
         const m = /^\/([^/]+)\/([^/]+)\/([0-9a-f]{40})\/(.+)$/.exec(decodeURIComponent(url.pathname));
         if (!m || m[1] !== owner || m[2] !== repo) return route.fulfill({ status: 404, headers: cors, body: "404: Not Found" });
         try {

@@ -15,3 +15,6 @@ venv/
 .env.*
 !.env.example
 !.env.template
+
+# Node packages of the review site's AI judge
+node_modules/

@@ -10,7 +10,7 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { chromium } = require("playwright");
-const { makeMock } = require("./mock-github.cjs");
+const { makeMock, git } = require("./mock-github.cjs");
 const { makeRepo } = require("./fixture.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -47,7 +47,14 @@ const picturesLoaded = (page) => page.evaluate(async () => {
 
 async function small(browser, base) {
   const repo = makeRepo();
-  const mock = makeMock({ clone: repo.clone, owner: "o", repo: "r", pulls: repo.pulls, branches: repo.branches });
+  // the AI judge has judged the pull request's commit, and no other
+  const head = git(repo.clone, ["rev-parse", "origin/paper"]).trim();
+  const judge = { at: "jeonglab-bcm/Paper2Repro/review-data", file: (sha) => (sha !== head ? null : {
+    version: 1, repo: "o/r", pr: 7, sha, judged_at: "2026-11-10T12:00:00Z", model: "claude-opus-5-5",
+    guide: { text: "Agrees when the conclusion is the same.\n<b>not html</b>", edit: "https://github.com/o/r/edit/main/REVIEW_GUIDE.md", hash: "x" },
+    papers: [{ id: "PMC1", folder: "PMC1", cards: [{ members: ["fig1.curve", "table1"], title: "Fig. 1 · Table 1", pr_verdict: "differs", verdict: "partly", reason: "The main number is close <i>enough</i>." }] }],
+  }) };
+  const mock = makeMock({ clone: repo.clone, owner: "o", repo: "r", pulls: repo.pulls, branches: repo.branches, judge });
   const page = await open(browser, mock);
   const step = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (err) { console.log("FAIL", name); throw err; } };
 
@@ -90,6 +97,24 @@ async function small(browser, base) {
     assert.equal(await page.locator('details.file[data-path$="check_results.py"]').count(), 0);
   });
 
+  await step("the AI judge's first verdict is shown, and one click takes it", async () => {
+    const cause = page.locator(".card").nth(0);
+    assert.match(await page.locator(".judgebar").textContent(), /AI judge\s*gave a first verdict on 1 result by your guide\. 1 differs from the pull request\./);
+    assert.equal(await cause.locator(".ai").textContent(), "AI judgePartly. The main number is close <i>enough</i>.");
+    assert.equal(await cause.locator("button.aipick").textContent(), "Partly");
+    assert.equal(await page.locator("#i-table1 .chip.ai").textContent(), "AI: Partly"); // the pull request says Differs there
+    assert.equal(await page.locator("#i-fig1\\.curve .chip.ai").count(), 0); // and Partly here, as the AI does
+    await page.locator(".judgebar summary").click();
+    assert.match(await page.locator(".judgebar .guide").textContent(), /Agrees when the conclusion is the same\.\n<b>not html<\/b>/);
+    assert.equal(await page.locator(".judgebar a").getAttribute("href"), "https://github.com/o/r/edit/main/REVIEW_GUIDE.md");
+    const take = page.locator(".take");
+    assert.equal(await take.textContent(), "Use the AI's verdict on 1 result I have not decided");
+    await take.click();
+    assert.equal(await cause.locator(".state").textContent(), "You say: Partly");
+    assert.equal(await page.locator(".bar .done").textContent(), "1");
+    assert.equal(await take.isVisible(), false);
+  });
+
   await step("a verdict of your own and a comment are kept, counted and shown on the figure", async () => {
     const cards = page.locator(".card");
     const cause = cards.nth(0);
@@ -112,7 +137,7 @@ async function small(browser, base) {
     await page.waitForTimeout(150);
     const text = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
-    assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1 · Table 1\*\*: Differs → Agrees\. The curve agrees within noise\./);
+    assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1 · Table 1\*\*: Differs → Agrees \(AI judge: Partly\)\. The curve agrees within noise\./);
     assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Choices the paper does not give\*\*: Say which release\./);
     assert.match(text, /\*\*Agreed \(1\):\*\* Values the paper prints/);
     assert.match(text, /\*\*Not decided \(2\)\*\*/);
@@ -169,6 +194,7 @@ async function small(browser, base) {
     await page.waitForSelector(".card");
     assert.equal(new URL(page.url()).search, "?r=o/r/tree/side");
     assert.match(await page.locator(".note").first().textContent(), /No Paper2Repro results.json/);
+    assert.equal(await page.locator(".judgebar").count(), 0); // no paper, so nothing for the AI judge to say
     assert.equal(await page.locator('details.file[data-path="tools.py"]').count(), 1);
   });
 
