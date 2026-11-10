@@ -1,0 +1,56 @@
+name: Paper2Repro release
+
+# On pull requests: a change to the paper2repro skill must bump its VERSION and add a CHANGELOG row.
+# On main: tag every CHANGELOG release that has no tag yet (paper2repro-v<version>) and publish it as
+# a GitHub release, so fossil reproductions can record the exact skill they ran with.
+on:
+  pull_request:
+    paths:
+      - "skills/paper2agent/paper2repro/**"
+      - "scripts/paper2repro_release.py"
+      - ".github/workflows/paper2repro-release.yml"
+  push:
+    branches: [main]
+    paths:
+      - "skills/paper2agent/paper2repro/VERSION"
+      - "skills/paper2agent/paper2repro/CHANGELOG.md"
+      - ".github/workflows/paper2repro-release.yml"
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version bumped with the skill
+        run: python3 scripts/paper2repro_release.py check "origin/${{ github.base_ref }}"
+
+  tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and publish missing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/paper2repro_release.py check HEAD
+          python3 scripts/paper2repro_release.py tags "$GITHUB_SHA" | while read -r tag commit; do
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "$tag exists"; continue
+            fi
+            sha=$(git rev-parse --verify "$commit^{commit}")
+            version=${tag#paper2repro-v}
+            notes=$(grep -E "^\| *${version//./\\.} *\|" skills/paper2agent/paper2repro/CHANGELOG.md | awk -F'|' '{gsub(/^ +| +$/, "", $6); print $6}')
+            gh release create "$tag" --target "$sha" --title "Paper2Repro $version" \
+              --notes "$notes"$'\n\n'"Skill folder: \`skills/paper2agent/paper2repro\` at \`${sha:0:7}\`."
+            echo "created $tag at ${sha:0:7}"
+          done
