@@ -1,0 +1,73 @@
+name: AI judge
+
+# Gives each result of every open reproduction a first verdict by the written guide
+# (review-site/judge/REVIEW_GUIDE.md), with Claude. The review page shows the verdicts and the
+# reviewer can change them. A commit that is already judged by the same guide costs nothing.
+# The verdicts are saved on the branch review-data. See review-site/README.md.
+on:
+  schedule:
+    - cron: "17 * * * *" # every hour: picks up new and changed pull requests
+  push:
+    branches: [main]
+    paths:
+      - "review-site/judge/REVIEW_GUIDE.md" # a changed guide judges everything again
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Repository whose open pull requests are judged (owner/name)
+        default: jeonglab-bcm/fossil
+      force:
+        description: Judge again, also what is already judged
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # the verdicts are pushed to the branch review-data
+
+concurrency:
+  group: ai-judge
+  cancel-in-progress: false
+
+jobs:
+  judge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open the branch that holds the verdicts
+        run: |
+          if git ls-remote --exit-code --heads origin review-data >/dev/null; then
+            git fetch --depth 1 origin review-data
+            git worktree add -B review-data data FETCH_HEAD
+          else
+            git worktree add --orphan -b review-data data
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Anthropic SDK
+        working-directory: review-site/judge
+        run: npm ci
+
+      - name: Judge
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ inputs.repo || 'jeonglab-bcm/fossil' }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = "true" ]; then set -- --force; fi
+          node review-site/judge/judge.mjs --repo "$REPO" --out data "$@"
+
+      - name: Save the verdicts
+        if: ${{ !cancelled() }}
+        working-directory: data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing new to save."; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "AI judge: verdicts of $(date -u +%F)"
+          git push origin review-data

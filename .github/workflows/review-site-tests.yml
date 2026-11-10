@@ -27,3 +27,10 @@ jobs:
 
       - name: The rules of the page (links, values, table shape, file sorting, escaping)
         run: node --test review-site/tests/core.test.mjs
+
+      - name: Install the AI judge's packages
+        working-directory: review-site/judge
+        run: npm ci
+
+      - name: The AI judge, with stand-ins for Claude and GitHub
+        run: node --test review-site/judge/judge.test.mjs

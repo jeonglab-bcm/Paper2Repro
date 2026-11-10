@@ -478,9 +478,10 @@ function shortLabel(item) {
   if (label.startsWith(t)) label = label.slice(t.length).replace(/^[ ,:]+/, "") || label;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
-function itemRow(item, cardOf) {
+function itemRow(item, cardOf, aiOf = new Map()) {
   const why = cardOf.has(item.id) ? `<a class="why" href="#d-${cardOf.get(item.id)}">Decide</a>` : "";
-  const changed = item._changed ? '<span class="chip new">changed here</span>' : "";
+  const ai = aiOf.has(item.id) && aiOf.get(item.id) !== item.verdict ? `<span class="chip ai" title="The AI judge's verdict for this result">AI: ${VERDICT_LABEL[aiOf.get(item.id)]}</span>` : "";
+  const changed = (item._changed ? '<span class="chip new">changed here</span>' : "") + ai;
   const p = pixelScore(item);
   const detail = item.method === "check" ? `<p class="detail">${esc((item.check || {}).detail)}</p>` : "";
   let body = fieldsHtml(item);
@@ -500,14 +501,14 @@ function viewerHtml(ctx, render, title) {
   const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between published and ours">' : "";
   return `<div class="viewer" data-mode="${modes[0][0]}"><div class="modes" role="group" aria-label="View">${buttons}</div><div class="stage">${layers}${slider}</div></div>`;
 }
-function stationHtml(ctx, st, cardOf) {
+function stationHtml(ctx, st, cardOf, aiOf) {
   const counts = {};
   for (const it of st.items) counts[it.verdict] = (counts[it.verdict] || 0) + 1;
   const dots = VERDICTS.filter((v) => counts[v]).map((v) => `<i class="dot v-${v}" title="${counts[v]} ${VERDICT_LABEL[v].toLowerCase()}"></i>`.repeat(counts[v])).join("");
   let views = st.renders.map((r) => (st.renders.length > 1 ? `<p class="rlabel">${esc(r.label)}</p>` : "") + viewerHtml(ctx, r, st.title)).join("");
   if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub">${imgTag(ctx, st.publishedOnly, st.title + ", published")}<figcaption>Published; no render of ours</figcaption></figure></div></div>`;
   return `<section class="station" id="fig-${esc(st.key)}"><header class="shead"><h3>${esc(st.title)}</h3><span class="dots">${dots}</span></header>` +
-    `<div class="sgrid">${views ? `<div class="views">${views}</div>` : ""}<div class="rows">${st.items.map((it) => itemRow(it, cardOf)).join("")}</div></div></section>`;
+    `<div class="sgrid">${views ? `<div class="views">${views}</div>` : ""}<div class="rows">${st.items.map((it) => itemRow(it, cardOf, aiOf)).join("")}</div></div></section>`;
 }
 const stripPath = (evidence) => String(evidence ?? "").replace(/^\S+\.\w+(?: \([^)]*\))?:\s+/, "");
 function evidenceHtml(ctx, folder, evidence) {
@@ -523,10 +524,38 @@ const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-la
 /** The question a card asks: a verdict of your own for a cause, OK or not OK for the rest. */
 function decideHtml(card) {
   if (card.kind === "cause") {
-    return `<footer class="decide"><span class="ask">The pull request says <b>${esc(VERDICT_LABEL[card.verdict] || card.verdict)}</b>. Your verdict:</span>` +
-      `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>${COMMENT}</footer>`;
+    const ai = card.ai ? `<p class="ai"><span class="aitag">AI judge</span><b>${VERDICT_LABEL[card.ai.verdict]}.</b> ${esc(card.ai.reason)}</p>` : "";
+    const button = (v) => `<button type="button" data-v="${v}"${card.ai && card.ai.verdict === v ? ' class="aipick" title="The AI judge\'s verdict"' : ""}>${VERDICT_LABEL[v]}</button>`;
+    return `${ai}<footer class="decide"><span class="ask">The pull request says <b>${esc(VERDICT_LABEL[card.verdict] || card.verdict)}</b>. Your verdict:</span>` +
+      `<span class="opts">${["agrees", "partly", "differs"].map(button).join("")}</span>${COMMENT}</footer>`;
   }
   return `<footer class="decide"><span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>${COMMENT}</footer>`;
+}
+/**
+ * What the AI judge saved for one paper: a map from a card's members to {verdict, reason}.
+ * judge is the file of this commit (see judge/judge.mjs), or null when there is none.
+ */
+export function judgeOf(judge, pid, folder) {
+  const out = new Map();
+  const paper = judge && Array.isArray(judge.papers) ? judge.papers.find((p) => p && (p.id === pid || p.folder === folder)) : null;
+  for (const c of (paper && Array.isArray(paper.cards) ? paper.cards : [])) {
+    if (c && Array.isArray(c.members) && ["agrees", "partly", "differs"].includes(c.verdict)) out.set(c.members.map(String).join("\x1f"), { verdict: c.verdict, reason: String(c.reason ?? "") });
+  }
+  return out;
+}
+/** The line above the decisions that says what the AI judge did, and by which guide. */
+function judgeBar(judge, cards, on) {
+  if (!on) return "";
+  const judged = cards.filter((c) => c.ai);
+  if (!judge || !judged.length) return '<p class="note judgebar">The AI judge has not looked at this commit yet. It runs every hour.</p>';
+  const differ = judged.filter((c) => c.ai.verdict !== c.verdict).length;
+  const g = judge.guide || {};
+  const link = (url, text) => (/^https:\/\/github\.com\/[\w.\/-]+$/.test(String(url)) ? `<a href="${esc(url)}" rel="noopener">${text}</a>` : "");
+  const by = [String(judge.judged_at || "").slice(0, 10), judge.model].filter(Boolean).map(esc).join(", ");
+  return `<div class="judgebar"><p><span class="aitag">AI judge</span>gave a first verdict on <b>${judged.length}</b> result${judged.length === 1 ? "" : "s"} by your guide. <b>${differ}</b> differ${differ === 1 ? "s" : ""} from the pull request.</p>` +
+    '<button type="button" class="btn take">Use the AI\'s verdict where I have not decided</button>' +
+    `<details class="hyps"><summary>The guide it follows</summary><pre class="guide">${esc(g.text || "")}</pre>` +
+    `<p class="note">${[link(g.edit, "Change the guide"), by].filter(Boolean).join(" · ")}</p></details></div>`;
 }
 function numRows(nums) {
   if (!nums.length) return "";
@@ -572,7 +601,7 @@ function cardHtml(ctx, folder, card) {
     body = `${notes}<ul class="rows-list${k === "outside" ? " files" : ""}">${rows}</ul>`;
   }
   const status = card.status === "open" ? '<span class="chip open">open</span>' : "";
-  const given = k === "cause" ? ` data-verdict="${esc(card.verdict)}" data-members="${esc(JSON.stringify(card.members.map((m) => String(m.id))))}"` : "";
+  const given = k === "cause" ? `${card.ai ? ` data-ai="${card.ai.verdict}"` : ""} data-verdict="${esc(card.verdict)}" data-members="${esc(JSON.stringify(card.members.map((m) => String(m.id))))}"` : "";
   return `<article class="card k-${k}" id="d-${card.key}" data-key="${card.key}" data-title="${esc(card.title)}"${given} tabindex="-1">` +
     `<header class="chead"><h3>${esc(card.title)}</h3>${head}${status}<span class="state" aria-live="polite"></span></header>${body}${decideHtml(card)}</article>`;
 }
@@ -675,7 +704,7 @@ function codeHtml(ctx, files, folders) {
   return [out.join(""), by];
 }
 
-function paperHtml(ctx, paper, shared, notes, idx) {
+function paperHtml(ctx, paper, shared, notes, idx, judge, judgeOn) {
   const { folder, results, baseResults, tree } = paper;
   const items = results.items.filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
   if (baseResults) {
@@ -685,10 +714,15 @@ function paperHtml(ctx, paper, shared, notes, idx) {
   const meta = results.paper || {}, pid = String(meta.id || folder);
   const counts = Object.fromEntries(VERDICTS.map((v) => [v, items.filter((it) => it.verdict === v).length]));
   const cards = decisionCards(pid, items, idx === 0 ? shared : [], idx === 0 ? notes : []);
-  const cardOf = new Map();
+  const cardOf = new Map(), aiOf = new Map(), verdicts = judgeOf(judge, pid, folder);
   for (const c of cards) {
-    if (c.kind === "cause") for (const m of c.members) cardOf.set(m.id, c.key);
-    else if (c.kind === "skipped") for (const m of c.rows) cardOf.set(m.id, c.key);
+    if (c.kind === "cause") {
+      c.ai = verdicts.get(c.members.map((m) => String(m.id)).join("\x1f")) || null;
+      for (const m of c.members) {
+        cardOf.set(m.id, c.key);
+        if (c.ai) aiOf.set(m.id, c.ai.verdict);
+      }
+    } else if (c.kind === "skipped") for (const m of c.rows) cardOf.set(m.id, c.key);
   }
   const stations = figureStations(folder, items, tree);
   const others = items.filter((it) => it.kind !== "figure");
@@ -696,10 +730,10 @@ function paperHtml(ctx, paper, shared, notes, idx) {
   let numbers = "";
   for (const [kind, title] of kinds) {
     const its = others.filter((it) => it.kind === kind);
-    if (its.length) numbers += `<h3 class="ghead">${title} <span class="count">${its.length}</span></h3>` + its.map((it) => `<div class="nblock">${kind === "table" ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it, cardOf)}</div>`).join("");
+    if (its.length) numbers += `<h3 class="ghead">${title} <span class="count">${its.length}</span></h3>` + its.map((it) => `<div class="nblock">${kind === "table" ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it, cardOf, aiOf)}</div>`).join("");
   }
   const rest = others.filter((it) => !kinds.some(([k]) => k === it.kind));
-  if (rest.length) numbers += '<h3 class="ghead">Other</h3>' + rest.map((it) => itemRow(it, cardOf)).join("");
+  if (rest.length) numbers += '<h3 class="ghead">Other</h3>' + rest.map((it) => itemRow(it, cardOf, aiOf)).join("");
   const doi = String(meta.doi || "");
   let cite = esc(meta.citation || "");
   if (/^10\.\d{4,9}\/\S+$/.test(doi)) cite = `<a href="https://doi.org/${esc(doi)}" rel="noopener">${cite || esc(doi)}</a>`;
@@ -710,15 +744,16 @@ function paperHtml(ctx, paper, shared, notes, idx) {
     `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#decisions-${idx}">Decisions <b>${cards.length}</b></a><a href="#code">Code</a></nav>`;
   const html = `<section class="paper" data-paper="${esc(pid)}"><div class="phead"><p class="pid"><span class="pmc">${esc(pid)}</span> ${cite}</p>` +
     `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}</div>` +
-    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((s) => stationHtml(ctx, s, cardOf)).join("") || '<p class="note">No figure items.</p>'}</section>` +
+    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((s) => stationHtml(ctx, s, cardOf, aiOf)).join("") || '<p class="note">No figure items.</p>'}</section>` +
     `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section>` +
-    `<section id="decisions-${idx}" class="sec"><h2>Decisions <span class="count">${nOpen} open</span></h2><div class="cards">${cards.map((c) => cardHtml(ctx, folder, c)).join("")}</div></section></section>`;
+    `<section id="decisions-${idx}" class="sec"><h2>Decisions <span class="count">${nOpen} open</span></h2>${judgeBar(judge, cards, judgeOn)}<div class="cards">${cards.map((c) => cardHtml(ctx, folder, c)).join("")}</div></section></section>`;
   return [html, { id: pid, title: String(meta.title || folder), counts, cards: cards.map((c) => c.key), open: nOpen }];
 }
 
 /**
  * The page of one pull request or branch.
- * review: {repo, label, title, url, number, branch, author, updated, draft, sha, notes, files, papers}
+ * review: {repo, label, title, url, number, branch, author, updated, draft, sha, notes, files, papers,
+ *          judge (the AI judge's file for this commit, or null), judgeOn (whether the site has an AI judge)}
  * ctx: {img(path), blob(path)} give the addresses of a picture and of a file on GitHub.
  */
 export function reviewHtml(review, ctx) {
@@ -727,7 +762,7 @@ export function reviewHtml(review, ctx) {
   const shared = review.files.filter((f) => f.cat === "shared");
   const sections = [], summaries = [];
   review.papers.forEach((paper, idx) => {
-    const [html, summary] = paperHtml(ctx, paper, shared, review.notes || [], idx);
+    const [html, summary] = paperHtml(ctx, paper, shared, review.notes || [], idx, review.judge || null, !!review.judgeOn);
     sections.push(html);
     summaries.push(summary);
   });

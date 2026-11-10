@@ -168,6 +168,33 @@ test("the page is laid out by the paper, and text from the repository is escaped
   assert.deepEqual(summary.papers[0].counts, { exact: 1, agrees: 0, partly: 1, inconclusive: 0, differs: 1, not_attempted: 1 });
 });
 
+test("the AI judge's first verdict is shown on its card and on the rows it is about", () => {
+  const judge = { judged_at: "2026-11-10T12:00:00Z", model: "claude-opus-5-5", guide: { text: "Judge the <conclusion>.", edit: "https://github.com/o/r/edit/main/REVIEW_GUIDE.md" },
+    papers: [{ id: "PMC1", folder: "PMC1", cards: [
+      { members: ["fig1.curve", "table1"], verdict: "agrees", reason: "Within <noise>." },
+      { members: ["nothing"], verdict: "differs", reason: "No such card." },
+      { members: ["text.n"], verdict: "exact", reason: "Not a verdict the judge may give." },
+    ] }] };
+  assert.deepEqual([...core.judgeOf(judge, "PMC1", "PMC1")], [["fig1.curve\x1ftable1", { verdict: "agrees", reason: "Within <noise>." }], ["nothing", { verdict: "differs", reason: "No such card." }]]);
+  assert.equal(core.judgeOf(null, "PMC1", "PMC1").size, 0);
+  const { html } = core.reviewHtml({ ...review(), judge, judgeOn: true }, ctx);
+  assert.ok(html.includes('<p class="ai"><span class="aitag">AI judge</span><b>Agrees.</b> Within &lt;noise&gt;.</p>'));
+  assert.ok(html.includes('data-ai="agrees" data-verdict="differs"'));
+  assert.ok(html.includes('<button type="button" data-v="agrees" class="aipick"'));
+  assert.equal((html.match(/class="aipick"/g) || []).length, 1);
+  assert.equal((html.match(/<span class="chip ai"[^>]*>AI: Agrees<\/span>/g) || []).length, 2); // both rows say something else
+  assert.ok(html.includes("gave a first verdict on <b>1</b> result by your guide. <b>1</b> differs from the pull request."));
+  assert.ok(html.includes('<pre class="guide">Judge the &lt;conclusion&gt;.</pre>'));
+  assert.ok(html.includes('<a href="https://github.com/o/r/edit/main/REVIEW_GUIDE.md" rel="noopener">Change the guide</a>'));
+  // a link that is not GitHub's is not made into a link
+  const odd = core.reviewHtml({ ...review(), judge: { ...judge, guide: { text: "x", edit: "javascript:alert(1)" } }, judgeOn: true }, ctx).html;
+  assert.ok(!odd.includes("javascript:") && !odd.includes("Change the guide"));
+  // not judged yet, and a site without an AI judge
+  assert.ok(core.reviewHtml({ ...review(), judge: null, judgeOn: true }, ctx).html.includes("The AI judge has not looked at this commit yet."));
+  const off = core.reviewHtml(review(), ctx).html;
+  assert.ok(!off.includes("AI judge") && !off.includes("aipick"));
+});
+
 test("pictures come from the commit, published next to ours", () => {
   const { html } = core.reviewHtml(review(), ctx);
   assert.ok(html.includes('<figure class="pub"><img src="https://raw.example/PMC1/figure-reproduction/published/figure-1.png"'));
