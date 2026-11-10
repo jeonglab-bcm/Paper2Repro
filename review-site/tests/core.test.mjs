@@ -86,13 +86,22 @@ test("the first sentence keeps abbreviations whole", () => {
   assert.equal(core.firstSentence("See Fig. 3 for it. More.")[0], "See Fig. 3 for it.");
 });
 
-test("items that share their hypotheses share a card", () => {
-  const [open, explained] = core.causeCards("PMC1", RESULTS.items);
-  assert.equal(open.length, 1);
-  assert.equal(open[0].title, "Fig. 1 · Table 1");
-  assert.equal(open[0].verdict, "differs");
-  assert.deepEqual(explained, []);
+test("items that share their hypotheses share a card; every cause has its own card", () => {
+  const cards = core.causeCards("PMC1", RESULTS.items);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].title, "Fig. 1 · Table 1");
+  assert.equal(cards[0].verdict, "differs");
+  assert.equal(cards[0].status, "open");
   assert.deepEqual(core.decisionCards("PMC1", RESULTS.items, [], []).map((c) => c.kind), ["cause", "choices", "errors", "skipped"]);
+  // a difference with a tested cause is a card too, after the open ones
+  const more = structuredClone(RESULTS.items);
+  more.unshift({ id: "fig3", label: "Fig. 3", kind: "figure", method: "values", verdict: "partly", cause: { category: "nondeterminism", status: "explained", summary: "Seeds." } });
+  assert.deepEqual(core.causeCards("PMC1", more).map((c) => [c.title, c.status]), [["Fig. 1 · Table 1", "open"], ["Fig. 3", "explained"]]);
+  // two causes in one figure are told apart by the part they are about
+  more.unshift({ id: "fig3.b", label: "Fig. 3b, panel b", kind: "figure", method: "values", verdict: "differs", cause: { category: "unknown", status: "open", summary: "Other." } });
+  assert.deepEqual(core.causeCards("PMC1", more).map((c) => c.title), ["Fig. 1 · Table 1", "Fig. 3: panel b", "Fig. 3: fig3"]);
+  const texts = [1, 2].map((n) => ({ id: `text.t${n}`, label: `GO counts ${n}`, kind: "value", method: "values", verdict: "differs", cause: { category: "unknown", status: "open", summary: `S${n}.` } }));
+  assert.deepEqual(core.causeCards("PMC1", texts).map((c) => c.title), ["Text: GO counts 1", "Text: GO counts 2"]);
   assert.equal(core.cardKey("a", "b"), core.cardKey("a", "b"));
   assert.notEqual(core.cardKey("a", "b"), core.cardKey("a", "c"));
 });
@@ -147,6 +156,12 @@ test("the page is laid out by the paper, and text from the repository is escaped
   assert.ok(html.includes("Conflicts with main"));
   assert.equal((html.match(/<article class="card/g) || []).length, 5); // cause, choices, errors, outside, not attempted
   assert.equal(summary.papers[0].cards.length, 5);
+  // a cause asks for the reviewer's own verdict, the other cards ask whether they are OK
+  assert.match(html, /data-verdict="differs" data-members="\[&quot;fig1.curve&quot;,&quot;table1&quot;\]"/);
+  assert.ok(html.includes("The pull request says <b>Differs</b>. Your verdict:"));
+  assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 1);
+  assert.equal((html.match(/Is this OK\?/g) || []).length, 4);
+  assert.ok(!html.includes("Needs work") && !html.includes("Accept"));
   // the evidence comes first: figures, then tables and numbers, then the decisions, then the code
   const at = ['id="figures-0"', 'id="numbers-0"', 'id="decisions-0"', 'id="code"'].map((x) => html.indexOf(x));
   assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));

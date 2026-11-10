@@ -12,7 +12,8 @@ page shows what a reviewer has to judge:
 - **Decisions.** One card per open cause, with the paper's numbers next to ours and the
   causes that were tested. Then the choices the paper does not give, the values the paper
   prints that contradict its own numbers, the changes outside the paper folder, and what was
-  not attempted. Each card takes **Accept** or **Needs work** and a note.
+  not attempted. A cause asks for your own verdict (**Agrees**, **Partly** or **Differs**); the
+  other cards ask whether they are **OK**. Every card has a comment box.
 - **Code.** The method and the analysis in full, changes outside the paper folder as a diff.
   Checks, tests and documents are linked. Outputs are counted and not shown.
 
@@ -22,7 +23,8 @@ page shows what a reviewer has to judge:
 2. Paste a link, anywhere on that page: `https://github.com/owner/repo/pull/40`, a branch
    (`.../tree/my-branch`), a comparison (`.../compare/main...my-branch`), or `owner/repo#40`.
 3. Decide. Decisions stay in your browser.
-4. **Copy review** puts your decisions on the clipboard as text. Paste it in the pull request.
+4. **Copy review** puts your decisions on the clipboard as text, the verdicts you want changed
+   first (`Fig. 2: Partly → Agrees. <your comment>`). Paste it in the pull request.
 
 A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 `?url=<a GitHub link>` opens the same page.
@@ -30,7 +32,7 @@ A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 A decision is kept by what its card says. When the pull request changes, a card that did not
 change keeps your decision, and a card that changed asks again.
 
-Keys: `j` and `k` move between decisions, `a` accepts, `w` marks needs work.
+Keys: `j` and `k` move between decisions.
 
 ## How it works
 
