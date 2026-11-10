@@ -147,6 +147,9 @@ test("the page is laid out by the paper, and text from the repository is escaped
   assert.ok(html.includes("Conflicts with main"));
   assert.equal((html.match(/<article class="card/g) || []).length, 5); // cause, choices, errors, outside, not attempted
   assert.equal(summary.papers[0].cards.length, 5);
+  // the evidence comes first: figures, then tables and numbers, then the decisions, then the code
+  const at = ['id="figures-0"', 'id="numbers-0"', 'id="decisions-0"', 'id="code"'].map((x) => html.indexOf(x));
+  assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));
   assert.deepEqual(summary.papers[0].counts, { exact: 1, agrees: 0, partly: 1, inconclusive: 0, differs: 1, not_attempted: 1 });
 });
 

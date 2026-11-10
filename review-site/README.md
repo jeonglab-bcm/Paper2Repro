@@ -6,13 +6,13 @@ by files.
 A Paper2Repro pull request has tens of thousands of lines, and most of them are outputs. The
 page shows what a reviewer has to judge:
 
+- **Figures.** The published figure next to ours: side by side, swipe, blink or overlay. Each
+  curve has its score against the pass mark and the best control.
+- **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
 - **Decisions.** One card per open cause, with the paper's numbers next to ours and the
   causes that were tested. Then the choices the paper does not give, the values the paper
   prints that contradict its own numbers, the changes outside the paper folder, and what was
   not attempted. Each card takes **Accept** or **Needs work** and a note.
-- **Figures.** The published figure next to ours: side by side, swipe, blink or overlay. Each
-  curve has its score against the pass mark and the best control.
-- **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
 - **Code.** The method and the analysis in full, changes outside the paper folder as a diff.
   Checks, tests and documents are linked. Outputs are counted and not shown.
 

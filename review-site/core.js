@@ -686,13 +686,13 @@ function paperHtml(ctx, paper, shared, notes, idx) {
   const nOpen = cards.filter((c) => c.status === "open").length;
   const changed = items.filter((it) => it._changed).length;
   const changedNote = baseResults && changed ? `<p class="note">This change touches ${changed} of ${items.length} items; they are marked <span class="chip new">changed here</span>.</p>` : "";
-  const nav = `<nav class="tabs" aria-label="Sections"><a href="#decisions-${idx}">Decisions <b>${cards.length}</b></a><a href="#figures-${idx}">Figures <b>${stations.length}</b></a>` +
-    `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#code">Code</a></nav>`;
+  const nav = `<nav class="tabs" aria-label="Sections"><a href="#figures-${idx}">Figures <b>${stations.length}</b></a>` +
+    `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#decisions-${idx}">Decisions <b>${cards.length}</b></a><a href="#code">Code</a></nav>`;
   const html = `<section class="paper" data-paper="${esc(pid)}"><div class="phead"><p class="pid"><span class="pmc">${esc(pid)}</span> ${cite}</p>` +
     `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}</div>` +
-    `<section id="decisions-${idx}" class="sec"><h2>Decisions <span class="count">${nOpen} open</span></h2><div class="cards">${cards.map((c) => cardHtml(ctx, folder, c)).join("")}</div></section>` +
     `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((s) => stationHtml(ctx, s, cardOf)).join("") || '<p class="note">No figure items.</p>'}</section>` +
-    `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section></section>`;
+    `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section>` +
+    `<section id="decisions-${idx}" class="sec"><h2>Decisions <span class="count">${nOpen} open</span></h2><div class="cards">${cards.map((c) => cardHtml(ctx, folder, c)).join("")}</div></section></section>`;
   return [html, { id: pid, title: String(meta.title || folder), counts, cards: cards.map((c) => c.key), open: nOpen }];
 }
 
