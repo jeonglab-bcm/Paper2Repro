@@ -1,17 +1,14 @@
 name: Review site
 
-# Press "Run workflow" to rebuild the review pages: one for every open pull request of the
-# repository below, and one for every recent branch that has no pull request. The pages are
-# published with GitHub Pages. See review-site/README.md.
+# Publishes review-site/ with GitHub Pages. The page is a static app: it reads a pull request
+# or branch from GitHub in the reader's browser, so nothing is built per pull request.
 on:
   workflow_dispatch:
-    inputs:
-      repo:
-        description: Repository to review (owner/name)
-        default: jeonglab-bcm/fossil
-      extra:
-        description: More pull request numbers or branch names, comma separated
-        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "review-site/**"
+      - ".github/workflows/review-site.yml"
 
 permissions:
   contents: read
@@ -19,40 +16,23 @@ permissions:
   id-token: write
 
 concurrency:
-  group: review-site
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
-      # The whole history, so each change can be compared with the point where it left main.
-      # A private repository needs the secret REVIEW_TOKEN (a token that can read it).
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.repo }}
-          path: target
-          fetch-depth: 0
-          token: ${{ secrets.REVIEW_TOKEN || github.token }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Pygments (colours for code)
-        run: pip install pygments==2.21.0
-
-      - name: Build the pages
-        env:
-          GH_TOKEN: ${{ secrets.REVIEW_TOKEN || github.token }}
-          REPO: ${{ inputs.repo }}
-          EXTRA: ${{ inputs.extra }}
-        run: >
-          python3 review-site/review_site.py --repo "$REPO" --clone target --out _site --extra "$EXTRA"
-          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Collect the app, without its tests
+        run: |
+          mkdir _site
+          cp -r review-site/index.html review-site/app.js review-site/core.js review-site/review.css review-site/vendor _site/
+          touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
 
@@ -60,12 +40,5 @@ jobs:
         with:
           path: _site
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

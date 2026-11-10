@@ -274,3 +274,44 @@ dialog textarea { width: 100%; height: 50vh; font: 13px var(--mono); background:
 }
 .viewer[data-mode="side"] .stage figcaption { position: static; display: block; background: none; color: #6a675f; padding: 2px 8px 6px; border-radius: 0; text-align: center; font-size: 12px; }
 .viewer[data-mode="side"] .stage .ours figcaption { color: #17805a; }
+
+/* the first page, and waiting */
+.paste { display: flex; gap: 8px; margin: 4px 0 6px; max-width: 760px; }
+.paste input { flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; }
+.paste input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.paste button { min-height: 46px; padding: 0 20px; border-radius: 10px; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); font-weight: 600; cursor: pointer; }
+.paste-error { color: var(--accent); min-height: 1.5em; }
+.problem { color: var(--ink); font-size: 16px; margin: 20px 0 12px; max-width: 70ch; }
+.busy { margin: 20px 0; font-size: 16px; }
+.busy::after { content: ""; display: inline-block; width: 12px; height: 12px; margin-left: 10px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .busy::after { animation: none; } }
+.linkish { border: 0; background: none; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: 13px; }
+.top .grow { flex: 1; }
+.recent { display: grid; gap: 4px; font-size: 14px; }
+.rbar:empty { height: 12px; border-radius: 6px; background: var(--soft); }
+.rbar .legend { min-height: 20px; }
+.rcard.seen { border-left-color: var(--v-incon); }
+.stage { aspect-ratio: var(--ar, 4 / 3); }
+dialog h3 { font-size: 16px; margin-bottom: 6px; }
+dialog .tok { width: 100%; min-height: 40px; padding: 0 10px; margin: 10px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font-family: var(--mono); }
+dialog .row { margin-bottom: 10px; }
+dialog::backdrop { background: rgba(0, 0, 0, .35); }
+
+/* code colours (highlight.js class names) */
+.code .hljs-comment, .code .hljs-quote { color: #6a737d; font-style: italic; }
+.code .hljs-keyword, .code .hljs-literal, .code .hljs-selector-tag, .code .hljs-meta .hljs-keyword { color: #a626a4; }
+.code .hljs-string, .code .hljs-regexp, .code .hljs-meta .hljs-string { color: #1a7f4b; }
+.code .hljs-number, .code .hljs-symbol { color: #986801; }
+.code .hljs-title, .code .hljs-title.function_, .code .hljs-section { color: #2b5fd9; }
+.code .hljs-built_in, .code .hljs-type, .code .hljs-title.class_ { color: #b35c00; }
+.code .hljs-attr, .code .hljs-attribute, .code .hljs-variable, .code .hljs-params { color: inherit; }
+.code .hljs-meta { color: #6a737d; }
+@media (prefers-color-scheme: dark) {
+  .code .hljs-comment, .code .hljs-quote, .code .hljs-meta { color: #8b949e; }
+  .code .hljs-keyword, .code .hljs-literal, .code .hljs-selector-tag, .code .hljs-meta .hljs-keyword { color: #d2a8ff; }
+  .code .hljs-string, .code .hljs-regexp, .code .hljs-meta .hljs-string { color: #7ee787; }
+  .code .hljs-number, .code .hljs-symbol { color: #e3b341; }
+  .code .hljs-title, .code .hljs-title.function_, .code .hljs-section { color: #79c0ff; }
+  .code .hljs-built_in, .code .hljs-type, .code .hljs-title.class_ { color: #ffa657; }
+}

@@ -146,7 +146,7 @@ The pull request starts with the `check_results.py` table (item, verdict, measur
 
 ## 👀 Reviewing a Reproduction
 
-A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) builds one page per open pull request or branch, laid out by the paper: the decisions to make, each figure next to the published one, each table in the paper's shape, and the code of the method only. Run the [Review site](.github/workflows/review-site.yml) workflow to rebuild the pages; they are published with GitHub Pages.
+A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) is a page to paste a pull request or branch link into. It shows the reproduction laid out by the paper: the decisions to make, each figure next to the published one, each table in the paper's shape, and the code of the method only. It is a static site that reads GitHub from the browser; the [Review site](.github/workflows/review-site.yml) workflow publishes it with GitHub Pages.
 
 ## 🐍 Package and Tutorial
 
@@ -219,7 +219,7 @@ It writes to `--out`:
 | Workflow | Runs | Checks |
 | --- | --- | --- |
 | [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), Paper2Fossil self-test (offline), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
-| [Review site tests](.github/workflows/review-site-tests.yml) | Pull requests and pushes to `main` that change `review-site/` | The page rules (value matching, table shape, file sorting, cause grouping) and a whole site built from a small repository |
+| [Review site tests](.github/workflows/review-site-tests.yml) | Pull requests and pushes to `main` that change `review-site/` | The rules of the review page: reading a pasted link, value matching, table shape, cause grouping, file sorting, escaping |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
 Run the fast tests locally:
