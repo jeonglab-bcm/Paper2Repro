@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<!-- Only GitHub is contacted, and nothing the page loads from a repository can run as a script. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://raw.githubusercontent.com blob: data:; connect-src https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<title>Reproduction review</title>
+<link rel="stylesheet" href="review.css">
+</head>
+<!-- data-repo: the repository whose open pull requests the first page lists. -->
+<body data-repo="jeonglab-bcm/fossil">
+<div id="app"><main class="wrap"><p class="note boot">Loading…</p></main></div>
+<noscript><p class="wrap note">This page reads GitHub from your browser and needs JavaScript.</p></noscript>
+<script type="module" src="app.js"></script>
+</body>
+</html>

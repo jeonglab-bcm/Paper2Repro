@@ -1,0 +1,44 @@
+name: Review site
+
+# Publishes review-site/ with GitHub Pages. The page is a static app: it reads a pull request
+# or branch from GitHub in the reader's browser, so nothing is built per pull request.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "review-site/**"
+      - ".github/workflows/review-site.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect the app, without its tests
+        run: |
+          mkdir _site
+          cp -r review-site/index.html review-site/app.js review-site/core.js review-site/review.css review-site/vendor _site/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
