@@ -9,28 +9,32 @@ page shows what a reviewer has to judge:
 - **Figures.** The published figure next to ours: side by side, swipe, blink or overlay. Each
   curve has its score against the pass mark and the best control.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
-- **Decisions.** One card per open cause, with the paper's numbers next to ours and the
-  causes that were tested. Then the choices the paper does not give, the values the paper
-  prints that contradict its own numbers, the changes outside the paper folder, and what was
-  not attempted. A cause asks for your own verdict (**Agrees**, **Partly** or **Differs**); the
-  other cards ask whether they are **OK**. Every card has a comment box.
-- **Code.** The method and the analysis in full, changes outside the paper folder as a diff.
-  Checks, tests and documents are linked. Outputs are counted and not shown.
+- **The decision, right below each figure and each table.** Why the result is not a plain
+  match (the cause and what was tested, the choices the paper does not give, the values the
+  paper prints that contradict its own numbers), then the question: "The pull request says
+  Partly. Your verdict:" with **Agrees**, **Partly** and **Differs**, and a comment box. Where
+  there is nothing to judge (a figure that was not attempted, a check) the question is
+  **OK** or **Not OK**. There is no separate list of decisions.
+- **Code.** The method and the analysis in full, changes outside the paper folder as a diff
+  with its own OK or Not OK. Checks, tests and documents are linked. Outputs are counted and
+  not shown.
 
 ## Use
 
 1. Open the site. The first page lists the open pull requests of the usual repository.
 2. Paste a link, anywhere on that page: `https://github.com/owner/repo/pull/40`, a branch
    (`.../tree/my-branch`), a comparison (`.../compare/main...my-branch`), or `owner/repo#40`.
-3. Decide. Decisions stay in your browser.
+3. Decide below each figure and table. **Next not decided** in the bar at the bottom jumps to
+   the next one, and at the end one button agrees with the pull request on everything you
+   left open. Decisions stay in your browser.
 4. **Copy review** puts your decisions on the clipboard as text, the verdicts you want changed
    first (`Fig. 2: Partly → Agrees. <your comment>`). Paste it in the pull request.
 
 A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 `?url=<a GitHub link>` opens the same page.
 
-A decision is kept by what its card says. When the pull request changes, a card that did not
-change keeps your decision, and a card that changed asks again.
+A decision is kept by what it is about. When the pull request changes, a figure or table whose
+verdicts and explanations did not change keeps your decision, and one that changed asks again.
 
 Keys: `j` and `k` move between decisions.
 

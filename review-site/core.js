@@ -9,7 +9,6 @@ export const VERDICT_LABEL = {
   exact: "Exact", agrees: "Agrees", partly: "Partly", inconclusive: "Inconclusive",
   differs: "Differs", not_attempted: "Not attempted",
 };
-const SEVERITY = { differs: 4, inconclusive: 3, partly: 2, not_attempted: 1, agrees: 0, exact: 0 };
 const CATEGORY_LABEL = {
   rendering_only: "Rendering only", paper_error: "Paper error", undocumented_setting: "Setting not stated",
   code_differs_from_paper: "Code differs from paper", code_does_not_run: "Code needed a fix",
@@ -200,11 +199,6 @@ export function token(item) {
   const known = { text: "Text", data: "Data", code: "Code", package: "Package", port: "Port" };
   return known[id.split(".")[0].toLowerCase()] || String(item.label ?? id).split(",")[0];
 }
-function tokens(items, limit = 5) {
-  const seen = [];
-  for (const it of items) if (!seen.includes(token(it))) seen.push(token(it));
-  return seen.length <= limit ? seen : [...seen.slice(0, limit - 1), `+${seen.length - limit + 1}`];
-}
 export function firstSentence(text) {
   const t = String(text ?? "").split(/\s+/).filter(Boolean).join(" ");
   const m = /^(.*?[.!?])\s+(?=[A-Z(])(.*)$/.exec(t);
@@ -231,88 +225,26 @@ function partOf(item) {
   return rest || String(item.id ?? "");
 }
 
-/** One card per cause, the open ones first; items that share their tested hypotheses share a card. */
-export function causeCards(paperId, items) {
-  const groups = new Map();
-  for (const it of items) {
-    const c = it.cause;
-    if (!c || it.verdict === "not_attempted") continue;
-    if ((SEVERITY[it.verdict] || 0) < 2 && c.status !== "open") continue;
-    const hyps = c.hypotheses || [];
-    const key = hyps.length ? "h\x1f" + hyps.map((h) => String(h.hypothesis ?? "")).sort().join("\x1f") : "s\x1f" + String(c.summary ?? "");
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(it);
-  }
-  const open = [], explained = [];
-  for (const members of groups.values()) {
-    const lead = members.find((m) => (m.kind === "table" || m.kind === "value") && fieldsOf(m).length) || members[0];
-    const cause = lead.cause;
-    const isOpen = members.some((m) => (m.cause || {}).status === "open");
-    const worst = members.map((m) => m.verdict).reduce((a, b) => ((SEVERITY[b] || 0) > (SEVERITY[a] || 0) ? b : a));
-    const nums = [], seen = new Set();
-    for (const m of members) {
-      for (const f of fieldsOf(m)) {
-        if (f.match || f.error || seen.has(f.name) || f.gap === null) continue;
-        seen.add(f.name);
-        nums.push(f);
-      }
-    }
-    nums.sort((a, b) => b.gap - a.gap);
-    const summaries = [];
-    for (const m of members) {
-      const s = squash((m.cause || {}).summary);
-      if (s && !summaries.some((x) => x[1] === s)) summaries.push([m.label ?? m.id, s]);
-    }
-    const card = {
-      kind: "cause", title: tokens(members).join(" · "), status: isOpen ? "open" : "explained", verdict: worst,
-      category: cause.category || "", summary: summaries.length ? summaries[0][1] : "", more: summaries.slice(1),
-      nums: nums.slice(0, 6), hyps: cause.hypotheses || [], members, evidence: cause.evidence || [],
-    };
-    card.key = cardKey(paperId, "cause", card.title, card.summary, card.status);
-    (isOpen ? open : explained).push(card);
-  }
-  const order = (a, b) => (SEVERITY[b.verdict] || 0) - (SEVERITY[a.verdict] || 0) || b.members.length - a.members.length;
-  const cards = [...open.sort(order), ...explained.sort(order)];
-  // two causes in the same figure or table: each title also says which part it is about
-  const times = new Map();
-  for (const c of cards) times.set(c.title, (times.get(c.title) || 0) + 1);
-  for (const c of cards) {
-    if (times.get(c.title) < 2) continue;
-    const part = partOf(c.members[0]);
-    c.title = `${c.title}: ${part.length > 48 ? part.slice(0, 47).trimEnd() + "…" : part}`;
-    c.key = cardKey(paperId, "cause", c.title, c.summary, c.status);
-  }
-  return cards;
-}
+const sameAs = (v) => (v === "exact" ? "agrees" : v);
 
-export function decisionCards(paperId, items, sharedFiles, notes) {
-  const cards = causeCards(paperId, items);
-  const choices = [], seen = new Map();
-  for (const it of items) {
-    for (const a of it.assumptions || []) {
-      if (!(a.source in SOURCE_LABEL)) continue;
-      const what = squash(a.what);
-      if (seen.has(what)) {
-        if (!seen.get(what).where.includes(token(it))) seen.get(what).where.push(token(it));
-        continue;
-      }
-      const row = { what, source: a.source, sensitivity: a.sensitivity ?? "", where: [token(it)] };
-      seen.set(what, row);
-      choices.push(row);
-    }
+/**
+ * What the reviewer is asked about one figure or one table, right below it. items are the
+ * results it holds (the curves of a figure, or the one table). The answer is a verdict of the
+ * reviewer's own (Agrees, Partly, Differs), or OK / Not OK where there is no result to judge.
+ */
+export function unitOf(paperId, id, title, items) {
+  const judged = items.filter((it) => it.verdict !== "not_attempted" && it.kind !== "code_check");
+  const ask = judged.length ? "verdict" : "ok";
+  const kinds = [...new Set(judged.map((it) => sameAs(it.verdict)))];
+  const given = ask !== "verdict" ? "" : kinds.length === 1 ? kinds[0] : "mixed";
+  let givenText = "";
+  if (ask === "verdict") {
+    const all = items.map((it) => it.verdict);
+    givenText = new Set(all).size === 1 ? VERDICT_LABEL[all[0]] || String(all[0])
+      : VERDICTS.filter((v) => all.includes(v)).map((v) => `${all.filter((x) => x === v).length} ${VERDICT_LABEL[v].toLowerCase()}`).join(", ");
   }
-  if (choices.length) cards.push({ kind: "choices", title: "Choices the paper does not give", rows: choices, key: cardKey(paperId, "choices", ...choices.map((c) => c.what)) });
-  const errors = [];
-  for (const it of items) {
-    for (const x of (it.values || {}).exceptions || []) {
-      if (x.category === "paper_error") errors.push({ where: token(it), field: x.field ?? "", evidence: x.evidence ?? "" });
-    }
-  }
-  if (errors.length) cards.push({ kind: "errors", title: "Values the paper prints that do not follow from its own numbers", rows: errors, key: cardKey(paperId, "errors", ...errors.map((x) => x.where + x.field)) });
-  if (sharedFiles.length) cards.push({ kind: "outside", title: "Changes outside the paper folder", rows: sharedFiles, notes, key: cardKey(paperId, "outside", ...sharedFiles.map((f) => f.path + f.added + f.deleted)) });
-  const skipped = items.filter((it) => it.verdict === "not_attempted");
-  if (skipped.length) cards.push({ kind: "skipped", title: "Not attempted", rows: skipped, key: cardKey(paperId, "skipped", ...skipped.map((it) => it.id)) });
-  return cards;
+  const sign = items.map((it) => [it.id, it.verdict, squash((it.cause || {}).summary), (it.cause || {}).status ?? ""].join("|"));
+  return { key: cardKey(paperId, "unit", id, ...sign), title, ask, given, givenText, items };
 }
 
 // -------------------------------------------------------------------- files
@@ -478,15 +410,14 @@ function shortLabel(item) {
   if (label.startsWith(t)) label = label.slice(t.length).replace(/^[ ,:]+/, "") || label;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
-function itemRow(item, cardOf) {
-  const why = cardOf.has(item.id) ? `<a class="why" href="#d-${cardOf.get(item.id)}">Decide</a>` : "";
+function itemRow(item) {
   const changed = item._changed ? '<span class="chip new">changed here</span>' : "";
   const p = pixelScore(item);
   const detail = item.method === "check" ? `<p class="detail">${esc((item.check || {}).detail)}</p>` : "";
   let body = fieldsHtml(item);
   if (body) body = `<details class="ibody"${item.verdict === "exact" || item.verdict === "agrees" ? "" : " open"}><summary>Numbers</summary>${body}</details>`;
   return `<div class="irow" id="i-${esc(item.id)}"><div class="ihead">${stamp(item.verdict)}<span class="ilabel">${esc(shortLabel(item))}</span>${changed}` +
-    `${scoreBar(p)}<span class="meas">${p ? "" : esc(measureOf(item))}</span>${why}</div>${detail}${body}</div>`;
+    `${scoreBar(p)}<span class="meas">${p ? "" : esc(measureOf(item))}</span></div>${detail}${body}</div>`;
 }
 const imgTag = (ctx, path, alt) => `<img src="${esc(ctx.img(path))}" data-path="${esc(path)}" alt="${esc(alt)}" loading="lazy">`;
 function viewerHtml(ctx, render, title) {
@@ -500,14 +431,14 @@ function viewerHtml(ctx, render, title) {
   const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between published and ours">' : "";
   return `<div class="viewer" data-mode="${modes[0][0]}"><div class="modes" role="group" aria-label="View">${buttons}</div><div class="stage">${layers}${slider}</div></div>`;
 }
-function stationHtml(ctx, st, cardOf) {
+function stationHtml(ctx, folder, st) {
   const counts = {};
   for (const it of st.items) counts[it.verdict] = (counts[it.verdict] || 0) + 1;
   const dots = VERDICTS.filter((v) => counts[v]).map((v) => `<i class="dot v-${v}" title="${counts[v]} ${VERDICT_LABEL[v].toLowerCase()}"></i>`.repeat(counts[v])).join("");
   let views = st.renders.map((r) => (st.renders.length > 1 ? `<p class="rlabel">${esc(r.label)}</p>` : "") + viewerHtml(ctx, r, st.title)).join("");
   if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub">${imgTag(ctx, st.publishedOnly, st.title + ", published")}<figcaption>Published; no render of ours</figcaption></figure></div></div>`;
   return `<section class="station" id="fig-${esc(st.key)}"><header class="shead"><h3>${esc(st.title)}</h3><span class="dots">${dots}</span></header>` +
-    `<div class="sgrid">${views ? `<div class="views">${views}</div>` : ""}<div class="rows">${st.items.map((it) => itemRow(it, cardOf)).join("")}</div></div></section>`;
+    `<div class="sgrid">${views ? `<div class="views">${views}</div>` : ""}<div class="rows">${st.items.map(itemRow).join("")}</div></div>${boxHtml(ctx, folder, st.unit)}</section>`;
 }
 const stripPath = (evidence) => String(evidence ?? "").replace(/^\S+\.\w+(?: \([^)]*\))?:\s+/, "");
 function evidenceHtml(ctx, folder, evidence) {
@@ -519,63 +450,55 @@ function evidenceHtml(ctx, folder, evidence) {
     return `<li>${esc(ev)}</li>`;
   }).join("");
 }
-const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author"></textarea>';
-/** The question a card asks: a verdict of your own for a cause, OK or not OK for the rest. */
-function decideHtml(card) {
-  if (card.kind === "cause") {
-    return `<footer class="decide"><span class="ask">The pull request says <b>${esc(VERDICT_LABEL[card.verdict] || card.verdict)}</b>. Your verdict:</span>` +
-      `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>${COMMENT}</footer>`;
+/** Why the results of one figure or table are not a plain match: causes, the choices made, the paper's own errors. */
+function whyHtml(ctx, folder, unit) {
+  const out = [], causes = new Map();
+  for (const it of unit.items) {
+    if (!it.cause) continue;
+    const summary = squash(it.cause.summary), k = summary || String(it.id);
+    if (!causes.has(k)) causes.set(k, { cause: it.cause, summary, items: [] });
+    causes.get(k).items.push(it);
   }
-  return `<footer class="decide"><span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>${COMMENT}</footer>`;
+  for (const { cause, summary, items } of causes.values()) {
+    const [lead, rest] = firstSentence(summary);
+    const who = items.length < unit.items.length ? `<b>${esc(items.map(shortLabel).join("; "))}:</b> ` : "";
+    const chips = `<span class="chip cat">${esc(CATEGORY_LABEL[cause.category] || cause.category || "")}</span>` + (cause.status === "open" ? '<span class="chip open">open</span>' : "");
+    const hyps = cause.hypotheses || [], ruled = hyps.filter((h) => h.result === "rejected").length;
+    let more = rest ? `<details class="more"><summary>More</summary><p>${esc(rest)}</p></details>` : "";
+    if (hyps.length) {
+      more += `<details class="hyps"><summary>${ruled ? `${ruled} of ${hyps.length} tested causes ruled out` : `${hyps.length} tested causes`}</summary><ul>` +
+        hyps.map((h) => `<li class="h-${esc(h.result)}"><span class="hres">${esc(h.result)}</span><span class="hyp">${esc(h.hypothesis)}</span><span class="test">${esc(h.test)}</span></li>`).join("") + "</ul></details>";
+    }
+    if ((cause.evidence || []).length) more += `<details class="hyps"><summary>Evidence</summary><ul class="ev">${evidenceHtml(ctx, folder, cause.evidence)}</ul></details>`;
+    out.push(`<div class="cause"><p class="lead">${who}${esc(lead)} ${chips}</p>${more}</div>`);
+  }
+  const choices = new Map();
+  for (const it of unit.items) {
+    for (const a of it.assumptions || []) if (a.source in SOURCE_LABEL && !choices.has(squash(a.what))) choices.set(squash(a.what), a);
+  }
+  if (choices.size) {
+    out.push(`<details class="hyps"><summary>${choices.size} choice${choices.size === 1 ? "" : "s"} the paper does not give</summary><ul class="rows-list">` +
+      [...choices].map(([what, a]) => `<li><span class="what">${esc(what)}</span><span class="sens">${esc(a.sensitivity ?? "")}</span><span class="tags"><i class="chip cat">${SOURCE_LABEL[a.source]}</i></span></li>`).join("") + "</ul></details>");
+  }
+  const errors = unit.items.flatMap((it) => ((it.values || {}).exceptions || []).filter((x) => x.category === "paper_error"));
+  if (errors.length) {
+    out.push(`<details class="hyps"><summary>${errors.length} value${errors.length === 1 ? "" : "s"} the paper prints that ${errors.length === 1 ? "does" : "do"} not follow from its own numbers</summary><ul class="rows-list">` +
+      errors.map((x) => `<li><span class="what"><i class="chip">${esc(x.field)}</i></span><span class="sens">${esc(stripPath(x.evidence))}</span></li>`).join("") + "</ul></details>");
+  }
+  return out.join("");
 }
-function numRows(nums) {
-  if (!nums.length) return "";
-  return '<div class="nums"><div class="num head"><span class="n"></span><span class="p">paper</span><span class="o">ours</span></div>' +
-    nums.map((f) => `<div class="num"><span class="n">${esc(f.name)}</span><span class="p">${esc(f.exp)}</span><span class="o">${esc(f.obs)}</span></div>`).join("") + "</div>";
+const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author"></textarea>';
+/** The decision that sits right below a figure or a table: why it is as it is, the question, the comment. */
+function boxHtml(ctx, folder, unit) {
+  const ask = unit.ask === "verdict"
+    ? `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>. Your verdict${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}:</span>` +
+      `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>`
+    : '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
+  return `<div class="dbox" id="d-${unit.key}" data-key="${unit.key}" data-title="${esc(unit.title)}" data-ask="${unit.ask}" data-given="${esc(unit.given)}" data-given-text="${esc(unit.givenText)}" tabindex="-1">` +
+    `${unit.notes || ""}${whyHtml(ctx, folder, unit)}<footer class="decide">${ask}<span class="state" aria-live="polite"></span>${COMMENT}</footer></div>`;
 }
-const memberChips = (members) => members.map((m) => `<a class="chip m v-${esc(m.verdict)}" href="#i-${esc(m.id)}">${esc(m.label ?? m.id)}</a>`).join("");
 export const fileAnchor = (path) => cardKey("file", path).slice(0, 10);
 const delta = (f) => `<span class="delta"><b class="add">+${f.added}</b>${f.deleted ? ` <b class="del">−${f.deleted}</b>` : ""}</span>`;
-
-function cardHtml(ctx, folder, card) {
-  const k = card.kind;
-  let head = "", body = "";
-  if (k === "cause") {
-    const [lead, rest] = firstSentence(card.summary);
-    const extra = card.more.map(([lbl, s]) => `<p><b>${esc(lbl)}:</b> ${esc(s)}</p>`).join("");
-    const more = rest || extra ? `<details class="more"><summary>More</summary>${rest ? `<p>${esc(rest)}</p>` : ""}${extra}</details>` : "";
-    let hyps = "";
-    if (card.hyps.length) {
-      const ruled = card.hyps.filter((h) => h.result === "rejected").length;
-      const label = ruled ? `${ruled} of ${card.hyps.length} tested causes ruled out` : `${card.hyps.length} tested causes`;
-      hyps = `<details class="hyps"><summary>${label}</summary><ul>${card.hyps.map((h) => `<li class="h-${esc(h.result)}"><span class="hres">${esc(h.result)}</span><span class="hyp">${esc(h.hypothesis)}</span><span class="test">${esc(h.test)}</span></li>`).join("")}</ul></details>`;
-    }
-    const ev = card.evidence.length ? `<details class="hyps"><summary>Evidence</summary><ul class="ev">${evidenceHtml(ctx, folder, card.evidence)}</ul></details>` : "";
-    head = stamp(card.verdict) + `<span class="chip cat">${esc(CATEGORY_LABEL[card.category] || card.category)}</span>`;
-    body = `<p class="lead">${esc(lead)}</p>${more}${numRows(card.nums)}${hyps}${ev}<div class="members">${memberChips(card.members)}</div>`;
-  } else {
-    let rows = "";
-    if (k === "choices") {
-      rows = card.rows.map((r) => `<li><span class="what">${esc(r.what)}</span><span class="sens">${esc(r.sensitivity)}</span><span class="tags"><i class="chip cat">${SOURCE_LABEL[r.source]}</i>${r.where.slice(0, 6).map((w) => `<i class="chip">${esc(w)}</i>`).join("")}</span></li>`).join("");
-    } else if (k === "errors") {
-      const by = new Map();
-      for (const r of card.rows) by.set(r.where, [...(by.get(r.where) || []), r]);
-      rows = [...by].map(([where, rs]) => `<li><span class="what"><b>${esc(where)}</b> ${rs.map((r) => `<i class="chip">${esc(r.field)}</i> `).join("")}</span>` +
-        `<details class="hyps"><summary>How we know</summary><ul class="ev">${rs.map((r) => `<li>${esc(stripPath(r.evidence))}</li>`).join("")}</ul></details></li>`).join("");
-    } else if (k === "outside") {
-      rows = card.rows.map((f) => `<li><a class="path" href="#f-${fileAnchor(f.path)}">${esc(f.path)}</a>${delta(f)}</li>`).join("");
-    } else if (k === "skipped") {
-      rows = card.rows.map((it) => `<li><span class="what"><b>${esc(it.label ?? it.id)}</b> ${esc(firstSentence((it.cause || {}).summary)[0])}</span></li>`).join("");
-    }
-    const notes = (card.notes || []).map((n) => `<p class="warn">${esc(n)}</p>`).join("");
-    head = `<span class="count">${card.rows.length}</span>`;
-    body = `${notes}<ul class="rows-list${k === "outside" ? " files" : ""}">${rows}</ul>`;
-  }
-  const status = card.status === "open" ? '<span class="chip open">open</span>' : "";
-  const given = k === "cause" ? ` data-verdict="${esc(card.verdict)}" data-members="${esc(JSON.stringify(card.members.map((m) => String(m.id))))}"` : "";
-  return `<article class="card k-${k}" id="d-${card.key}" data-key="${card.key}" data-title="${esc(card.title)}"${given} tabindex="-1">` +
-    `<header class="chead"><h3>${esc(card.title)}</h3>${head}${status}<span class="state" aria-live="polite"></span></header>${body}${decideHtml(card)}</article>`;
-}
 
 /** A GitHub patch (the hunks of one file) as lines with their numbers. */
 export function diffHtml(patch) {
@@ -638,7 +561,7 @@ function fileHtml(ctx, f, opened) {
   return `<details class="file" id="f-${fileAnchor(f.path)}" data-path="${esc(f.path)}" data-status="${f.status}"${opened ? " open" : ""}>` +
     `<summary><span class="path">${esc(f.rel)}</span><span class="chip">${tag}</span>${delta(f)}<a class="gh" href="${esc(ctx.blob(f.path))}" rel="noopener">GitHub</a></summary>${body}</details>`;
 }
-function codeHtml(ctx, files, folders) {
+function codeHtml(ctx, files, folders, outsideBox) {
   const by = Object.fromEntries(GROUPS.map((g) => [g[0], []]));
   for (const f of files) {
     const [cat, folder] = classify(f.path, folders);
@@ -663,7 +586,7 @@ function codeHtml(ctx, files, folders) {
     const n = lines(fs);
     if (shown) {
       if (cat !== "shared") fs.sort((a, b) => b.added + b.deleted - (a.added + a.deleted));
-      out.push(`<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines</span></h3>` + fs.map((f, i) => fileHtml(ctx, f, first && i === 0 && cat !== "shared")).join(""));
+      out.push(`<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines</span></h3>` + fs.map((f, i) => fileHtml(ctx, f, first && i === 0 && cat !== "shared")).join("") + (cat === "shared" ? outsideBox : ""));
       first = false;
     } else if (cat === "generated") {
       out.push(`<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines, not shown</span></h3>`);
@@ -675,7 +598,7 @@ function codeHtml(ctx, files, folders) {
   return [out.join(""), by];
 }
 
-function paperHtml(ctx, paper, shared, notes, idx) {
+function paperHtml(ctx, paper, idx) {
   const { folder, results, baseResults, tree } = paper;
   const items = results.items.filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
   if (baseResults) {
@@ -684,40 +607,50 @@ function paperHtml(ctx, paper, shared, notes, idx) {
   }
   const meta = results.paper || {}, pid = String(meta.id || folder);
   const counts = Object.fromEntries(VERDICTS.map((v) => [v, items.filter((it) => it.verdict === v).length]));
-  const cards = decisionCards(pid, items, idx === 0 ? shared : [], idx === 0 ? notes : []);
-  const cardOf = new Map();
-  for (const c of cards) {
-    if (c.kind === "cause") for (const m of c.members) cardOf.set(m.id, c.key);
-    else if (c.kind === "skipped") for (const m of c.rows) cardOf.set(m.id, c.key);
-  }
+  const keys = [];
   const stations = figureStations(folder, items, tree);
+  for (const st of stations) {
+    st.unit = unitOf(pid, "fig-" + st.key, st.title, st.items);
+    keys.push(st.unit.key);
+  }
   const others = items.filter((it) => it.kind !== "figure");
+  const times = new Map();
+  for (const it of others) times.set(token(it), (times.get(token(it)) || 0) + 1);
+  const titleOf = (it) => {
+    if (times.get(token(it)) < 2) return token(it);
+    const part = partOf(it);
+    return `${token(it)}: ${part.length > 48 ? part.slice(0, 47).trimEnd() + "…" : part}`;
+  };
+  const block = (it, head) => {
+    const unit = unitOf(pid, String(it.id), titleOf(it), [it]);
+    keys.push(unit.key);
+    return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}${boxHtml(ctx, folder, unit)}</div>`;
+  };
   const kinds = [["table", "Tables"], ["value", "Numbers in the text"], ["code_check", "Checks"]];
   let numbers = "";
   for (const [kind, title] of kinds) {
     const its = others.filter((it) => it.kind === kind);
-    if (its.length) numbers += `<h3 class="ghead">${title} <span class="count">${its.length}</span></h3>` + its.map((it) => `<div class="nblock">${kind === "table" ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it, cardOf)}</div>`).join("");
+    if (its.length) numbers += `<h3 class="ghead">${title} <span class="count">${its.length}</span></h3>` + its.map((it) => block(it, kind === "table")).join("");
   }
   const rest = others.filter((it) => !kinds.some(([k]) => k === it.kind));
-  if (rest.length) numbers += '<h3 class="ghead">Other</h3>' + rest.map((it) => itemRow(it, cardOf)).join("");
+  if (rest.length) numbers += '<h3 class="ghead">Other</h3>' + rest.map((it) => block(it, false)).join("");
   const doi = String(meta.doi || "");
   let cite = esc(meta.citation || "");
   if (/^10\.\d{4,9}\/\S+$/.test(doi)) cite = `<a href="https://doi.org/${esc(doi)}" rel="noopener">${cite || esc(doi)}</a>`;
-  const nOpen = cards.filter((c) => c.status === "open").length;
   const changed = items.filter((it) => it._changed).length;
   const changedNote = baseResults && changed ? `<p class="note">This change touches ${changed} of ${items.length} items; they are marked <span class="chip new">changed here</span>.</p>` : "";
   const nav = `<nav class="tabs" aria-label="Sections"><a href="#figures-${idx}">Figures <b>${stations.length}</b></a>` +
-    `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#decisions-${idx}">Decisions <b>${cards.length}</b></a><a href="#code">Code</a></nav>`;
+    `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#code">Code</a></nav>`;
   const html = `<section class="paper" data-paper="${esc(pid)}"><div class="phead"><p class="pid"><span class="pmc">${esc(pid)}</span> ${cite}</p>` +
     `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}</div>` +
-    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((s) => stationHtml(ctx, s, cardOf)).join("") || '<p class="note">No figure items.</p>'}</section>` +
-    `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section>` +
-    `<section id="decisions-${idx}" class="sec"><h2>Decisions <span class="count">${nOpen} open</span></h2><div class="cards">${cards.map((c) => cardHtml(ctx, folder, c)).join("")}</div></section></section>`;
-  return [html, { id: pid, title: String(meta.title || folder), counts, cards: cards.map((c) => c.key), open: nOpen }];
+    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((st) => stationHtml(ctx, folder, st)).join("") || '<p class="note">No figure items.</p>'}</section>` +
+    `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section></section>`;
+  return [html, { id: pid, title: String(meta.title || folder), counts, keys }];
 }
 
 /**
- * The page of one pull request or branch.
+ * The page of one pull request or branch. Each figure and each table has its decision right
+ * below it; what changed outside the paper folder has its decision in the code section.
  * review: {repo, label, title, url, number, branch, author, updated, draft, sha, notes, files, papers}
  * ctx: {img(path), blob(path)} give the addresses of a picture and of a file on GitHub.
  */
@@ -727,18 +660,26 @@ export function reviewHtml(review, ctx) {
   const shared = review.files.filter((f) => f.cat === "shared");
   const sections = [], summaries = [];
   review.papers.forEach((paper, idx) => {
-    const [html, summary] = paperHtml(ctx, paper, shared, review.notes || [], idx);
+    const [html, summary] = paperHtml(ctx, paper, idx);
     sections.push(html);
     summaries.push(summary);
   });
   if (!review.papers.length) {
-    const card = { kind: "outside", title: "Changed files", rows: shared, notes: review.notes || [], key: cardKey(review.repo, review.label, "files", ...review.files.map((f) => f.path)) };
     sections.push(`<section class="paper"><div class="phead"><h1>${esc(review.title || review.label)}</h1>` +
-      '<p class="note">No Paper2Repro results.json in this change, so there is no paper to lay it out by.</p></div>' +
-      `<section class="sec"><h2>Decisions</h2><div class="cards">${cardHtml(ctx, "", card)}</div></section></section>`);
-    summaries.push({ id: "", title: review.title || review.label, counts: {}, cards: [card.key], open: 0 });
+      '<p class="note">No Paper2Repro results.json in this change, so there is no paper to lay it out by. The changed files are below.</p></div></section>');
+    summaries.push({ id: "", title: review.title || review.label, counts: {}, keys: [] });
   }
-  const [code, by] = codeHtml(ctx, review.files, folders);
+  const notes = (review.notes || []).map((n) => `<p class="warn">${esc(n)}</p>`).join("");
+  let outsideBox = "", outsideKey = null;
+  if (shared.length) {
+    const unit = {
+      key: cardKey(review.repo, review.label, "outside", ...shared.map((f) => f.path + f.added + f.deleted)),
+      title: review.papers.length ? "Changes outside the paper folder" : "Changed files", ask: "ok", given: "", givenText: "", items: [], notes,
+    };
+    outsideBox = boxHtml(ctx, "", unit);
+    outsideKey = unit.key;
+  }
+  const [code, by] = codeHtml(ctx, review.files, folders, outsideBox);
   const bits = [];
   if (review.number) bits.push(`<a href="${esc(review.url)}" rel="noopener">#${review.number}</a>`);
   if (review.branch) bits.push(`<span class="mono">${esc(review.branch)}</span>`);
@@ -747,11 +688,14 @@ export function reviewHtml(review, ctx) {
   if (review.updated) bits.push(esc(review.updated.slice(0, 10)));
   const chips = (review.draft ? '<span class="chip">draft</span>' : "") + '<span class="ci"></span>';
   const html = `<header class="top"><div class="wrap"><a class="back" href="./">All reviews</a><span class="refline">${esc(review.repo)} · ${bits.join(" · ")} ${chips}</span></div></header>` +
-    `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${code}</section></main>` +
-    '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided</span><span class="grow"></span>' +
-    `<button type="button" class="copy">Copy review</button><a class="btn" href="${esc(review.url)}" rel="noopener">Open on GitHub</a></div></div>`;
+    `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${shared.length ? "" : notes}${code}</section>` +
+    '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Agree with the pull request on these</button></div></main>' +
+    '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided</span>' +
+    '<button type="button" class="btn next">Next not decided</button><span class="grow"></span>' +
+    `<button type="button" class="copy">Copy review</button><a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></div></div>`;
   const lines = Object.fromEntries(Object.entries(by).map(([cat, fs]) => [cat, fs.reduce((n, f) => n + f.added + f.deleted, 0)]));
-  return { html, summary: { papers: summaries, files: review.files.length, lines, sha: review.sha } };
+  const keys = summaries.flatMap((p) => p.keys).concat(outsideKey ? [outsideKey] : []);
+  return { html, summary: { papers: summaries, keys, files: review.files.length, lines, sha: review.sha } };
 }
 
 /** The first page: a box to paste a link into, and what is open in the usual repository. */
