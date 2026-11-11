@@ -146,7 +146,7 @@ The pull request starts with the `check_results.py` table (item, verdict, measur
 
 ## 👀 Reviewing a Reproduction
 
-A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) is a page to paste a pull request or branch link into. It shows the reproduction laid out by the paper: each figure next to the published one, each table in the paper's shape, then the decisions to make, and the code of the method only. It is a static site that reads GitHub from the browser; the [Review site](.github/workflows/review-site.yml) workflow publishes it with GitHub Pages. An [AI judge](.github/workflows/ai-judge.yml) gives each result a first verdict by a guide you write in words ([`REVIEW_GUIDE.md`](review-site/judge/REVIEW_GUIDE.md)); the reviewer can change it.
+A reproduction pull request has tens of thousands of lines, most of them outputs. [`review-site/`](review-site/README.md) is a page to paste a pull request or branch link into. It shows the reproduction laid out by the paper: each figure next to the published one, each table in the paper's shape, then the decisions to make, and the code of the method only. It is a static site that reads GitHub from the browser; the [Review site](.github/workflows/review-site.yml) workflow publishes it with GitHub Pages.
 
 ## 🐍 Package and Tutorial
 
@@ -219,8 +219,7 @@ It writes to `--out`:
 | Workflow | Runs | Checks |
 | --- | --- | --- |
 | [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), Paper2Fossil self-test (offline), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
-| [Review site tests](.github/workflows/review-site-tests.yml) | Pull requests and pushes to `main` that change `review-site/` | The rules of the review page (reading a pasted link, value matching, table shape, cause grouping, file sorting, escaping) and the AI judge with stand-ins for Claude and GitHub |
-| [AI judge](.github/workflows/ai-judge.yml) | Every hour, when the guide changes, or manual dispatch | Not a test: Claude gives each result of the open fossil pull requests a first verdict by `REVIEW_GUIDE.md` |
+| [Review site tests](.github/workflows/review-site-tests.yml) | Pull requests and pushes to `main` that change `review-site/` | The rules of the review page: reading a pasted link, value matching, table shape, cause grouping, file sorting, escaping |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
 Run the fast tests locally:

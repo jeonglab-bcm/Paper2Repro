@@ -34,28 +34,6 @@ change keeps your decision, and a card that changed asks again.
 
 Keys: `j` and `k` move between decisions.
 
-## The AI judge
-
-The AI judge gives each result that does not simply agree a **first verdict** (Agrees, Partly or
-Differs) with a one-line reason. You see it on the card, next to the pull request's own verdict,
-and you decide: one click takes the AI's verdict on everything you have not decided, and any
-card can be changed.
-
-- **You decide how it judges.** It follows the guide in
-  [`judge/REVIEW_GUIDE.md`](judge/REVIEW_GUIDE.md), written in plain words. Edit that file (the
-  page links to it as "Change the guide") and everything open is judged again. A repository can
-  have its own `REVIEW_GUIDE.md` at its root; that one is used when it exists.
-- **What it sees.** The paper's printed values next to ours, the published figure next to ours,
-  the verdict of the reproduction's own counting rule, and the author's explanation, marked as
-  a claim to weigh.
-- **When it runs.** The [AI judge](../.github/workflows/ai-judge.yml) workflow runs every hour,
-  when the guide changes, and on its **Run workflow** button. A commit that is already judged
-  by the same guide is skipped, so an hour with nothing new costs nothing.
-- **What it uses.** Claude Opus 5.5 through the repository secret `ANTHROPIC_API_KEY`, one
-  request for each result. If a safety classifier declines a request, Anthropic's default
-  fallback model answers instead; if that declines too, the card has no AI verdict.
-- **Where the verdicts are.** On the branch `review-data`, one file for each judged commit.
-
 ## How it works
 
 The site is static files. Your browser asks GitHub: the REST API for the pull request and its
@@ -81,8 +59,6 @@ connections to GitHub alone.
 2. **Settings → Pages → Source: GitHub Actions.** The workflow publishes on each push that
    changes `review-site/`.
 3. To list another repository on the first page, change `data-repo` in `index.html`.
-4. For the AI judge, add the secret `ANTHROPIC_API_KEY`. To run without it, remove
-   `data-judge` from `index.html` and the AI judge workflow.
 
 The site of a public repository is public. It holds no data of its own.
 
@@ -103,19 +79,11 @@ Then open `http://127.0.0.1:8000/`.
 | `app.js` | reads GitHub, keeps decisions, drives the figure viewers |
 | `review.css` | the look, light and dark |
 | `vendor/` | highlight.js 11.12.0 (BSD-3-Clause), served by the site itself |
-| `judge/judge.mjs` | the AI judge: reads open pull requests, asks Claude, saves the verdicts |
-| `judge/REVIEW_GUIDE.md` | how the AI judges, in words. Yours to change |
 
 ## Tests
 
 ```bash
 node --test review-site/tests/core.test.mjs
-```
-
-The AI judge is tested with stand-ins for Claude and GitHub:
-
-```bash
-cd review-site/judge && npm ci && node --test judge.test.mjs
 ```
 
 The browser test runs the app in Chromium with GitHub answered from a local clone
