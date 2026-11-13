@@ -175,6 +175,7 @@ async function render() {
     shown = location.search;
   }
   document.title = "Reproduction review";
+  document.body.classList.remove("deck");
   if (!link || link.kind === "repo") return home(link ? `${link.owner}/${link.repo}` : DEFAULT_REPO);
   const name = link.kind === "pull" ? `#${link.number}` : link.branch;
   messagePage(`Reading ${name} of ${link.owner}/${link.repo} from GitHub…`, { busy: true });
@@ -281,7 +282,7 @@ function wireReview(review, c, summary) {
     const s = said(repo, box.dataset.key);
     box.dataset.v = s.v;
     box.dataset.same = String(agreesWithPr(box, s.v));
-    box.querySelectorAll(".decide button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === s.v)));
+    box.querySelectorAll(".decide .opts button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === s.v)));
     const ta = box.querySelector("textarea");
     if (document.activeElement !== ta) { ta.value = s.note; if (ta.value) grow(ta); }
     box.querySelector(".state").textContent = !s.v ? "" : s.v === "pr" ? "You agree with the pull request" : box.dataset.ask === "ok" ? LABEL[s.v]
@@ -298,12 +299,13 @@ function wireReview(review, c, summary) {
   };
   boxes.forEach((box) => {
     paint(box);
-    box.querySelectorAll(".decide button").forEach((b) => b.addEventListener("click", () => {
+    box.querySelectorAll(".decide .opts button").forEach((b) => b.addEventListener("click", () => {
       const s = said(repo, box.dataset.key);
       s.v = s.v === b.dataset.v ? "" : b.dataset.v;
       store.set(dkey(repo, box.dataset.key), s);
       paint(box);
       progress();
+      deck.decided(box);
     }));
     const ta = box.querySelector("textarea");
     ta.addEventListener("input", () => {
@@ -322,14 +324,79 @@ function wireReview(review, c, summary) {
     goTo(left.find((x) => boxes.indexOf(x) > at) || left[0]);
   });
   // everything not decided: as the pull request says (its own verdict where it gives one, OK where the question is OK)
-  rest.querySelector(".rest").addEventListener("click", () => {
+  app.querySelectorAll(".rest").forEach((b) => b.addEventListener("click", () => {
     for (const box of open()) {
       const v = box.dataset.ask === "ok" ? "ok" : ["agrees", "partly", "differs"].includes(box.dataset.given) ? box.dataset.given : "pr";
       store.set(dkey(repo, box.dataset.key), { ...said(repo, box.dataset.key), v });
       paint(box);
     }
     progress();
-  });
+    deck.refresh();
+  }));
+
+  // On a phone the review is a deck of cards, like flashcards: one figure or table fills the
+  // screen with its verdict buttons below it, and a verdict brings the next card.
+  const narrow = window.matchMedia("(max-width: 700px)");
+  const deck = {
+    on: false, at: 0,
+    cards: [...app.querySelectorAll(".station, .nblock, .outside")].filter((x) => x.querySelector(".dbox")),
+    bar: app.querySelector(".deckbar"), end: app.querySelector(".deckend"),
+    box(i) { return this.cards[i] && this.cards[i].querySelector(".dbox"); },
+    refresh() {
+      if (!this.on) return;
+      const end = this.at >= this.cards.length, left = open().length, all = this.cards.length;
+      this.cards.forEach((x, k) => x.classList.toggle("current", k === this.at));
+      this.end.hidden = !end;
+      this.bar.querySelector(".dtitle").textContent = end ? "Done" : this.box(this.at).dataset.title;
+      this.bar.querySelector(".dcount").textContent = end ? "" : `${this.at + 1} / ${all}`;
+      this.bar.querySelector(".dprev").disabled = this.at === 0;
+      this.bar.querySelector(".dnext").disabled = end;
+      this.bar.querySelector(".dprog i").style.width = `${all ? ((all - left) / all) * 100 : 0}%`;
+      this.end.querySelector(".dsum").textContent = left ? `${all - left} of ${all} decided. ${left} ${left === 1 ? "is" : "are"} not decided yet.` : `All ${all} decided.`;
+      this.end.querySelector(".dfirst").parentElement.hidden = !left;
+      this.end.querySelector(".rest").parentElement.hidden = !left;
+    },
+    show(i) {
+      this.at = Math.max(0, Math.min(this.cards.length, i));
+      this.refresh();
+      const card = this.cards[this.at];
+      if (!card) return;
+      card.querySelectorAll(".views, .irow, .ofiles").forEach((x) => { x.scrollTop = 0; });
+      // one picture at a time: the overlap first, as it shows both
+      card.querySelectorAll(".viewer").forEach((v) => { if (!["pub", "ours", "overlay"].includes(v.dataset.mode)) v.setMode(v.querySelector('.pick [data-m="overlay"]') ? "overlay" : v.querySelector(".pick button")?.dataset.m || "side"); });
+    },
+    enter() {
+      this.on = true;
+      document.body.classList.add("deck");
+      const first = this.cards.findIndex((x) => !said(repo, x.querySelector(".dbox").dataset.key).v);
+      this.show(first === -1 ? this.cards.length : first);
+    },
+    leave() {
+      this.on = false;
+      document.body.classList.remove("deck");
+      this.end.hidden = true;
+      this.cards.forEach((x) => x.classList.remove("current"));
+      app.querySelectorAll(".viewer").forEach((v) => v.setMode("side"));
+    },
+    // a verdict as the pull request says goes straight on; a change stays, for the comment that says why
+    decided(box) {
+      if (!this.on) return;
+      this.refresh();
+      const s = said(repo, box.dataset.key);
+      if (s.v && agreesWithPr(box, s.v) && !s.note.trim()) {
+        const at = this.at;
+        setTimeout(() => { if (this.on && this.at === at && this.box(at) === box && said(repo, box.dataset.key).v) this.show(at + 1); }, 350);
+      }
+    },
+  };
+  const wantsCards = () => narrow.matches && store.get("rv:view") !== "page" && deck.cards.length > 0;
+  deck.bar.querySelector(".dprev").addEventListener("click", () => deck.show(deck.at - 1));
+  deck.bar.querySelector(".dnext").addEventListener("click", () => deck.show(deck.at + 1));
+  deck.bar.querySelector(".dpage").addEventListener("click", () => { store.set("rv:view", "page"); deck.leave(); });
+  app.querySelector(".dcards").addEventListener("click", () => { store.del("rv:view"); deck.enter(); });
+  deck.end.querySelector(".dfirst").addEventListener("click", () => deck.show(deck.cards.findIndex((x) => !said(repo, x.querySelector(".dbox").dataset.key).v)));
+  boxes.forEach((box) => box.querySelector(".dgo").addEventListener("click", () => deck.show(deck.at + 1)));
+  narrow.onchange = () => { if (!app.contains(deck.bar)) return; if (wantsCards() && !deck.on) deck.enter(); else if (!narrow.matches && deck.on) deck.leave(); };
   progress();
   wireReview.keys = (ev) => {
     if (ev.key !== "j" && ev.key !== "k") return;
@@ -360,8 +427,7 @@ function wireReview(review, c, summary) {
     out.push(`_From the review page: ${location.href.split("#")[0]}_`);
     return out.join("\n");
   };
-  const copy = app.querySelector(".copy");
-  copy.addEventListener("click", () => {
+  app.querySelectorAll(".copy").forEach((copy) => copy.addEventListener("click", () => {
     const text = reviewText();
     const done = () => {
       copy.textContent = "Copied";
@@ -377,22 +443,29 @@ function wireReview(review, c, summary) {
     });
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
     else fallback();
-  });
+  }));
 
   // figure viewers
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   app.querySelectorAll(".viewer").forEach((v) => {
     let timer = null;
     const stage = v.querySelector(".stage"), range = v.querySelector(".swipe");
-    v.querySelectorAll(".modes button").forEach((b) => b.addEventListener("click", () => {
-      v.dataset.mode = b.dataset.m;
-      v.querySelectorAll(".modes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    v.setMode = (m) => {
+      v.dataset.mode = m;
+      v.querySelectorAll(".modes button, .pick button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.m === m)));
       clearInterval(timer);
       v.classList.remove("b");
-      if (b.dataset.m === "blink" && !still) timer = setInterval(() => { if (v.isConnected) v.classList.toggle("b"); else clearInterval(timer); }, 800);
-    }));
+      if (m === "blink" && !still) timer = setInterval(() => { if (v.isConnected) v.classList.toggle("b"); else clearInterval(timer); }, 800);
+    };
+    v.querySelectorAll(".modes button, .pick button").forEach((b) => b.addEventListener("click", () => v.setMode(b.dataset.m)));
     if (range) range.addEventListener("input", () => stage.style.setProperty("--cut", range.value + "%"));
-    stage.addEventListener("click", (ev) => { if (v.dataset.mode === "blink" && ev.target !== range) v.classList.toggle("b"); });
+    stage.addEventListener("click", (ev) => {
+      if (v.dataset.mode === "blink" && ev.target !== range) v.classList.toggle("b");
+      if (!document.body.classList.contains("deck")) return;
+      // on a card, a tap on the picture shows the next one: original, ours, overlap
+      const names = [...v.querySelectorAll(".pick button")].map((x) => x.dataset.m), at = names.indexOf(v.dataset.mode);
+      if (at !== -1) v.setMode(names[(at + 1) % names.length]);
+    });
     const first = stage.querySelector("img");
     const size = () => { if (first.naturalWidth) stage.style.setProperty("--ar", `${first.naturalWidth} / ${first.naturalHeight}`); };
     first.addEventListener("load", size);
@@ -423,6 +496,8 @@ function wireReview(review, c, summary) {
     d.addEventListener("toggle", load);
     load();
   });
+
+  if (wantsCards()) deck.enter();
 
   // checks of the head commit, when GitHub has some
   api(`/repos/${c.owner}/${c.repo}/commits/${c.sha}/check-runs?per_page=100`).then((data) => {

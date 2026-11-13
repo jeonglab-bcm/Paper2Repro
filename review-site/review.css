@@ -368,3 +368,45 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 @media (max-width: 700px) {
   .viewer[data-mode="side"] .stage, .viewer[data-mode="side"][data-n="3"] .stage { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* cards for a phone: one figure or table fills the screen, its verdict buttons below it */
+.deckbar, .deckend, .pick, .dgo, .bar .dcards { display: none; }
+@media (max-width: 700px) { .bar .dcards { display: inline-flex; } .bar .next { display: none; } }
+body.deck { overflow: hidden; }
+body.deck .top, body.deck .bar, body.deck .restbar { display: none !important; }
+body.deck .deckbar { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto 40px auto; align-items: center; gap: 2px 6px; position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 20; padding: 0 6px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.deckbar .dprev, .deckbar .dnext { width: 44px; height: 44px; border: 0; background: none; font-size: 28px; line-height: 1; cursor: pointer; color: var(--ink); }
+.deckbar button:disabled { opacity: .25; }
+.deckbar .dtitle { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deckbar .dcount { font-size: 13px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+.deckbar .dpage { font-size: 12px; padding: 0 6px 0 2px; white-space: nowrap; }
+.deckbar .dprog { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--soft); }
+.deckbar .dprog i { display: block; height: 100%; width: 0; background: var(--ours); transition: width .2s; }
+body.deck .station, body.deck .nblock, body.deck .outside { display: none; }
+body.deck .current { display: flex; flex-direction: column; position: fixed; top: 56px; left: 0; right: 0; bottom: 0; z-index: 15; margin: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border: 0; border-radius: 0; background: var(--surface); overflow: hidden; }
+body.deck .current > .shead, body.deck .current > h4, body.deck .current > .ghead { display: none; }
+body.deck .current > .views, body.deck .current > .irow, body.deck .current > .ofiles { flex: 1 1 auto; min-height: 0; overflow: auto; border: 0; padding: 0; }
+body.deck .current > .dbox { flex: none; max-height: 62%; overflow: auto; margin-top: 8px; }
+body.deck .current > .shead + .dbox { flex: 1 1 auto; max-height: none; }
+body.deck .modes, body.deck .swipe { display: none; }
+body.deck .pick { display: flex; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.pick button { flex: 1; min-height: 38px; border: 0; border-right: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 600; cursor: pointer; }
+.pick button:last-child { border-right: 0; }
+.pick button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+body.deck .viewer, body.deck .viewer[data-n] { max-width: none; }
+body.deck .current > .views { display: flex; flex-direction: column; gap: 8px; }
+body.deck .viewer, body.deck .viewer[data-n] { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 260px; }
+body.deck .viewer .stage, body.deck .viewer[data-mode] .stage { flex: 1 1 auto; display: block; position: relative; aspect-ratio: auto; max-width: none; height: auto; min-height: 200px; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+body.deck .viewer .stage figure, body.deck .viewer[data-mode] .stage figure { display: none; position: absolute; inset: 0; border: 0; border-radius: 0; }
+body.deck .viewer[data-mode="pub"] .stage figure.pub, body.deck .viewer[data-mode="ours"] .stage figure.ours, body.deck .viewer[data-mode="overlay"] .stage figure.ovl { display: block; }
+body.deck .viewer .stage img, body.deck .viewer[data-mode] .stage img { width: 100%; height: 100%; object-fit: contain; }
+body.deck .viewer .stage figcaption, body.deck .viewer[data-mode] .stage figcaption { display: none; }
+body.deck .viewer[data-mode] .stage::after { display: none; }
+body.deck .dbox .decide { gap: 8px; }
+body.deck .dbox .decide .opts { display: flex; flex: 1 1 100%; gap: 8px; }
+body.deck .dbox .decide .opts button { flex: 1; min-height: 46px; font-size: 16px; }
+body.deck .dbox .ask { flex: 1 1 100%; }
+body.deck .dbox:not([data-v=""]) .dgo { display: inline-flex; align-items: center; min-height: 36px; margin-left: auto; background: var(--ink); color: var(--bg); border-color: var(--ink); }
+body.deck .deckend:not([hidden]) { display: flex; position: fixed; top: 56px; left: 0; right: 0; bottom: 0; z-index: 16; align-items: center; justify-content: center; padding: 24px; text-align: center; background: var(--bg); }
+.deckend .dhead { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.deckend p { margin-top: 12px; }

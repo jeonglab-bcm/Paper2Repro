@@ -42,6 +42,23 @@ verdicts and explanations did not change keeps your decision, and one that chang
 
 Keys: `j` and `k` move between decisions.
 
+## On a phone: cards
+
+On a screen up to 700 px wide the review is a deck of cards, like flashcards. One figure or
+table fills the screen, with its verdict buttons below it.
+
+- **One picture at a time.** Original, Ours and Overlap are three tabs; the overlap shows
+  first, and a tap on the picture goes to the next one.
+- **A verdict brings the next card.** If your verdict is what the pull request says, the next
+  card comes by itself. If you change it, or say Not OK, the card stays for your comment, and
+  **Next** goes on.
+- **‹ and ›** in the bar at the top go back and forward. The bar shows where you are
+  ("2 / 13") and how much is decided.
+- **The last card** says what is left, agrees with the pull request on the rest if you want,
+  and has **Copy review**.
+- **Whole page** in the bar shows the page as on a computer; **Cards** in the bottom bar
+  brings the cards back. The choice is remembered.
+
 ## How it works
 
 The site is static files. Your browser asks GitHub: the REST API for the pull request and its
