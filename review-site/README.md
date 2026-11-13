@@ -19,13 +19,17 @@ page shows what a reviewer has to judge:
   is not a plain match (the cause and what was tested, the choices the paper does not give,
   the values the paper prints that contradict its own numbers). The page draws no charts of
   its own.
+- **Your review, at a glance.** Below the paper's title, your decisions apart: **Not decided**,
+  **To change** (`Fig. 2: Partly → Agrees`) and **Agreed**. A name goes to its figure or table.
+  Each figure and table also says **Not decided**, **Agreed** or **To change** at its top.
 - **Code.** The method and the analysis in full, changes outside the paper folder as a diff
   with its own OK or Not OK. Checks, tests and documents are linked. Outputs are counted and
   not shown.
 
 ## Use
 
-1. Open the site. The first page lists the open pull requests of the usual repository.
+1. Open the site. The first page lists the open pull requests of the usual repository, apart by
+   where each stands for you (see below).
 2. Paste a link, anywhere on that page: `https://github.com/owner/repo/pull/40`, a branch
    (`.../tree/my-branch`), a comparison (`.../compare/main...my-branch`), or `owner/repo#40`.
 3. Decide below each figure and table. **Next not decided** in the bar at the bottom jumps to
@@ -33,6 +37,27 @@ page shows what a reviewer has to judge:
    left open. Decisions stay in your browser.
 4. **Copy review** puts your decisions on the clipboard as text, the verdicts you want changed
    first (`Fig. 2: Partly → Agrees. <your comment>`). Paste it in the pull request.
+
+## The first page: where each pull request stands
+
+The open pull requests are in three groups, by your decisions in this browser:
+
+| Group | On the card | When |
+| --- | --- | --- |
+| **To review** | Not opened | you have not opened it |
+| | Not started | opened, nothing decided |
+| | In progress | some decided; "4 of 13 decided" |
+| | Changed since your review | it has new commits since you decided; the card says how many figures and tables ask again |
+| **Changes requested** | Changes requested | all decided, and at least one verdict is yours and not the pull request's, or is Not OK; "2 to change: Fig. 1, Fig. 3" |
+| **Agreed** | Agreed | all decided, all as the pull request says |
+
+A card in the last two groups also says whether you copied the review: **Review copied** with the
+time, **Review not copied yet**, or **Decisions changed since you copied the review**. The page
+knows that you pressed **Copy review**; it does not read the pull request's comments, so it
+cannot know that you pasted it.
+
+Decisions stay in the browser where you made them. A phone and a computer each keep their own, so
+a pull request you reviewed on one is "Not opened" on the other.
 
 A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 `?url=<a GitHub link>` opens the same page.
@@ -54,8 +79,9 @@ table fills the screen, with its verdict buttons below it.
   **Next** goes on.
 - **‹ and ›** in the bar at the top go back and forward. The bar shows where you are
   ("2 / 13") and how much is decided.
-- **The last card** says what is left, agrees with the pull request on the rest if you want,
-  and has **Copy review**.
+- **The last card** says what is left, lists your decisions apart (not decided, to change,
+  agreed; a name goes to its card), agrees with the pull request on the rest if you want, and
+  has **Copy review**.
 - **Whole page** in the bar shows the page as on a computer; **Cards** in the bottom bar
   brings the cards back. The choice is remembered.
 

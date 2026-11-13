@@ -230,6 +230,85 @@ test("a change without a paper still gets a page", () => {
   assert.ok(html.includes('data-title="Changed files" data-ask="ok"'));
 });
 
+test("a decision stands as the pull request says, or asks for a change", () => {
+  assert.equal(core.standOf({ given: "partly" }, "partly"), "same");
+  assert.equal(core.standOf({ given: "partly" }, "agrees"), "change");
+  assert.equal(core.standOf({ given: "mixed" }, "partly"), "change");
+  assert.equal(core.standOf({ given: "differs" }, "pr"), "same");
+  assert.equal(core.standOf({ given: "" }, "ok"), "same");
+  assert.equal(core.standOf({ given: "" }, "no"), "change");
+  assert.equal(core.standOf({ given: "differs" }, ""), "");
+  assert.equal(core.standOf({}, "agrees"), "unknown"); // kept by an older version, without what the pull request said
+});
+
+test("a pull request stands by the reviewer's decisions: to review, changes requested, agreed", () => {
+  const { summary } = core.reviewHtml(review(), ctx);
+  assert.deepEqual(summary.units.map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Text", "Changes outside the paper folder"]);
+  assert.deepEqual(summary.keys, summary.units.map((u) => u.key));
+  const sum = { sha: "a".repeat(40), keys: summary.keys, units: summary.units };
+  const by = Object.fromEntries(summary.units.map((u) => [u.title, u.key]));
+  const stand = (decisions, sha = sum.sha, kept = sum) => core.standing(kept, (k) => decisions[k] || {}, sha);
+  assert.equal(core.standing(null, () => ({}), "x").state, "new");
+  assert.equal(stand({}).state, "seen");
+  const some = { [by["Fig. 1"]]: { v: "agrees" }, [by["Table 1"]]: { v: "differs" } };
+  assert.deepEqual([stand(some).state, stand(some).done, stand(some).all, stand(some).change], ["started", 2, 5, ["Fig. 1"]]);
+  const all = { ...some, [by["Fig. 2"]]: { v: "no" }, [by.Text]: { v: "agrees" }, [by["Changes outside the paper folder"]]: { v: "ok" } };
+  assert.deepEqual([stand(all).state, stand(all).change], ["changes", ["Fig. 1", "Fig. 2"]]);
+  const agreed = { ...all, [by["Fig. 1"]]: { v: "partly" }, [by["Fig. 2"]]: { v: "ok" } };
+  assert.equal(stand(agreed).state, "agreed");
+  // the pull request changed after the review: it is to review again; one that was only opened is not "changed"
+  assert.equal(stand(agreed, "b".repeat(40)).state, "updated");
+  assert.equal(stand({}, "b".repeat(40)).state, "seen");
+  // kept by an older version, without what the pull request said: Not OK is a change anyway, a verdict is not known
+  const old = { sha: sum.sha, keys: summary.keys };
+  assert.equal(stand(all, sum.sha, old).state, "changes");
+  assert.equal(stand(agreed, sum.sha, old).state, "reviewed");
+  // results.json alone gives the same decisions as the page, so the first page can read an old review again
+  assert.deepEqual(core.paperUnits("PMC1", structuredClone(RESULTS)), summary.units.slice(0, 4));
+  // the set of decisions has a name that changes with a verdict or a comment
+  const sig = (d) => core.reviewSig(summary.keys, (k) => d[k] || {});
+  assert.equal(sig(all), sig(structuredClone(all)));
+  assert.notEqual(sig(all), sig(agreed));
+  assert.notEqual(sig(all), sig({ ...all, [by.Text]: { v: "agrees", note: "a comment" } }));
+});
+
+test("the review page lists the decisions apart: not decided, to change, agreed", () => {
+  const { html, summary } = core.reviewHtml(review(), ctx);
+  assert.equal((html.match(/<section class="rmap"/g) || []).length, 2); // below the paper's head, and on the last card of a phone
+  const by = Object.fromEntries(summary.units.map((u) => [u.title, u.key]));
+  const said = { [by["Fig. 1"]]: { v: "agrees", note: "It <agrees>." }, [by["Fig. 2"]]: { v: "no" }, [by["Table 1"]]: { v: "differs" } };
+  const map = core.mapHtml(summary.units, (k) => said[k] || {}, "Review copied.");
+  const row = (cls) => [...(new RegExp(`<div class="mrow m-${cls}">.*?</span></div>`, "s").exec(map) || [""])[0].matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => m[1].replace(/<[^>]+>/g, ""));
+  assert.deepEqual(row("open"), ["Text", "Changes outside the paper folder"]);
+  assert.deepEqual(row("change"), ["Fig. 1: Partly → Agrees with a comment", "Fig. 2: Not OK"]);
+  assert.deepEqual(row("same"), ["Table 1"]);
+  assert.ok(map.includes(`data-key="${by["Table 1"]}"`) && map.includes('title="It &lt;agrees&gt;."') && map.includes('<p class="mfoot">Review copied.</p>'));
+  assert.ok(!core.mapHtml(summary.units, () => ({})).includes("m-same")); // a row with nothing in it is left out
+});
+
+test("the first page keeps apart what is to review, where changes are requested and what is agreed", () => {
+  const pull = (number) => ({ number, title: `Reproduce PMC${number}`, user: { login: "x" }, head: { sha: "abc", ref: "b" } });
+  const mine = new Map([
+    [1, { state: "agreed", done: 3, all: 3, change: [], sent: { state: "yes", when: "12 Nov" } }],
+    [2, { state: "changes", done: 3, all: 3, change: ["Fig. 2", "Table <1>"], sent: { state: "no" } }],
+    [3, { state: "started", done: 1, all: 3, change: [] }],
+    [4, { state: "updated", done: 3, all: 3, change: ["Fig. 1"], again: 2 }],
+  ]);
+  const html = core.pullsHtml("o/r", [1, 2, 3, 4, 5].map(pull), mine);
+  const groups = html.split('<section class="rgroup ').slice(1).map((g) => [/<h3 class="ghead">([^<]+) <span class="count">(\d+)/.exec(g).slice(1).join(" "), [...g.matchAll(/data-number="(\d+)".*?<span class="rstate">([^<]+)</g)].map((m) => `#${m[1]} ${m[2]}`)]);
+  assert.deepEqual(groups, [
+    ["To review 3", ["#3 In progress", "#4 Changed since your review", "#5 Not opened"]],
+    ["Changes requested 1", ["#2 Changes requested"]],
+    ["Agreed 1", ["#1 Agreed"]],
+  ]);
+  const facts = (n) => new RegExp(`data-number="${n}".*?<p class="facts">(.*?)</p>`).exec(html)[1].replace(/<\/span>/g, " | ").replace(/<[^>]+>/g, "");
+  assert.equal(facts(1), "3 of 3 decided | Review copied 12 Nov | ");
+  assert.equal(facts(2), "3 of 3 decided | 2 to change: Fig. 2, Table &lt;1&gt; | Review not copied yet | ");
+  assert.equal(facts(3), "1 of 3 decided | ");
+  assert.equal(facts(4), "3 of 3 decided before it changed | 2 to decide again | 1 to change: Fig. 1 | ");
+  assert.equal(facts(5), "Not opened yet | ");
+});
+
 test("the first page lists what is open, each with its address", () => {
   const html = core.homeHtml({ repo: "o/r", pulls: [{ number: 7, title: "Reproduce <PMC1>", user: { login: "x" }, head: { sha: "abc", ref: "paper" }, updated_at: "2026-11-09" }], recent: [] });
   assert.ok(html.includes('href="?r=o/r/pull/7"'));

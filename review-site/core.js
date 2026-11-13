@@ -247,6 +247,57 @@ export function unitOf(paperId, id, title, items) {
   return { key: cardKey(paperId, "unit", id, ...sign), title, ask, given, givenText, items };
 }
 
+// --------------------------------------------------------- the reviewer's side
+
+/** What a reviewer can say in one decision, as the page names it. */
+export const SAID_LABEL = { ...VERDICT_LABEL, ok: "OK", no: "Not OK", pr: "as the pull request says" };
+
+/**
+ * How what the reviewer said (v) stands against the pull request: "" (nothing said), "same",
+ * "change", or "unknown" for a verdict kept by an older version of the page, which did not keep
+ * what the pull request said.
+ */
+export function standOf(unit, v) {
+  if (!v) return "";
+  if (v === "pr" || v === "ok") return "same";
+  if (v === "no") return "change";
+  if (unit.given === undefined) return "unknown";
+  return v === unit.given ? "same" : "change";
+}
+
+/** What the browser keeps of a unit, to say later where its pull request stands. */
+export const slimUnit = (u) => ({ key: u.key, title: u.title, ask: u.ask, given: u.given, givenText: u.givenText });
+
+/**
+ * Where a pull request stands for this reviewer, from what the browser kept of it.
+ * sum is {sha, keys, units} as kept when its review was last opened (null: never), said(key)
+ * gives {v, note}, and sha is the head of the pull request now. state is one of:
+ *   new       not opened               seen      opened, nothing decided
+ *   started   some decided             updated   it changed after the reviewer decided
+ *   changes   all decided, some to change        agreed   all decided, as the pull request says
+ *   reviewed  all decided, kept by an older version: not known whether something is to change
+ */
+export function standing(sum, said, sha) {
+  const units = !sum ? [] : sum.units || (sum.keys || []).map((key) => ({ key }));
+  const out = { state: "new", done: 0, all: units.length, change: [], unknown: 0 };
+  if (!units.length) return out;
+  for (const u of units) {
+    const how = standOf(u, said(u.key).v);
+    if (!how) continue;
+    out.done++;
+    if (how === "change") out.change.push(u.title || "");
+    if (how === "unknown") out.unknown++;
+  }
+  out.state = !out.done ? "seen" : sha && sum.sha !== sha ? "updated" : out.done < out.all ? "started"
+    : out.change.length ? "changes" : out.unknown ? "reviewed" : "agreed";
+  return out;
+}
+
+/** A name for a set of decisions as they are now: it changes when a verdict or a comment does. */
+export function reviewSig(keys, said) {
+  return cardKey(...keys.map((k) => { const s = said(k); return `${k}|${s.v || ""}|${String(s.note || "").trim()}`; }));
+}
+
 // -------------------------------------------------------------------- files
 
 /** GitHub's list of changed files as {path, added, deleted, status A|M|D, patch}. */
@@ -470,6 +521,25 @@ function whyHtml(ctx, folder, unit) {
   }
   return out.join("");
 }
+/**
+ * The reviewer's decisions at a glance, apart by how they stand: what is not decided, what the
+ * reviewer wants changed, and what is agreed. Each name goes to its figure or table.
+ * units: [{key, title, given, givenText}] in the order of the page; said(key) gives {v, note}.
+ */
+export function mapHtml(units, said, foot = "") {
+  const rows = { open: [], change: [], same: [] };
+  for (const u of units) {
+    const s = said(u.key), how = standOf(u, s.v) || "open";
+    let text = esc(u.title);
+    if (how === "change") text += `: ${u.givenText ? `${esc(u.givenText)} → ` : ""}${SAID_LABEL[s.v]}`;
+    const note = String(s.note || "").trim();
+    if (note) text += ` <i class="pen" title="${esc(note)}">with a comment</i>`;
+    rows[how === "change" || how === "open" ? how : "same"].push(`<button type="button" class="mchip" data-key="${esc(u.key)}">${text}</button>`);
+  }
+  const row = (cls, title, chips) => (chips.length ? `<div class="mrow m-${cls}"><span class="mname">${title} <b>${chips.length}</b></span><span class="mchips">${chips.join("")}</span></div>` : "");
+  return '<h3 class="mhead">Your review</h3>' + row("open", "Not decided", rows.open) + row("change", "To change", rows.change) + row("same", "Agreed", rows.same) +
+    (foot ? `<p class="mfoot">${esc(foot)}</p>` : "");
+}
 const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author"></textarea>';
 /** The decision that sits right below a figure or a table: the question, the comment, then the closed details. */
 function boxHtml(unit, details = "") {
@@ -583,21 +653,16 @@ function codeHtml(ctx, files, folders, outsideBox) {
   return [out.join(""), by];
 }
 
-function paperHtml(ctx, paper, idx) {
-  const { folder, results, baseResults, tree } = paper;
+const KINDS = [["table", "Tables"], ["value", "Numbers in the text"], ["code_check", "Checks"]];
+/**
+ * One paper's results as what a reviewer decides on, in the order of the page: each figure,
+ * then each table, number and check. tree (the paths of the change) finds the pictures.
+ */
+export function paperLayout(folder, results, tree = []) {
   const items = results.items.filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
-  if (baseResults) {
-    const old = new Map((baseResults.items || []).map((it) => [it && it.id, JSON.stringify(it)]));
-    for (const it of items) it._changed = old.get(it.id) !== JSON.stringify(it);
-  }
-  const meta = results.paper || {}, pid = String(meta.id || folder);
-  const counts = Object.fromEntries(VERDICTS.map((v) => [v, items.filter((it) => it.verdict === v).length]));
-  const keys = [];
+  const pid = String((results.paper || {}).id || folder);
   const stations = figureStations(folder, items, tree);
-  for (const st of stations) {
-    st.unit = unitOf(pid, "fig-" + st.key, st.title, st.items);
-    keys.push(st.unit.key);
-  }
+  for (const st of stations) st.unit = unitOf(pid, "fig-" + st.key, st.title, st.items);
   const others = items.filter((it) => it.kind !== "figure");
   const times = new Map();
   for (const it of others) times.set(token(it), (times.get(token(it)) || 0) + 1);
@@ -606,21 +671,34 @@ function paperHtml(ctx, paper, idx) {
     const part = partOf(it);
     return `${token(it)}: ${part.length > 48 ? part.slice(0, 47).trimEnd() + "…" : part}`;
   };
-  const block = (it, head) => {
-    const unit = unitOf(pid, String(it.id), titleOf(it), [it]);
-    keys.push(unit.key);
+  const groups = [...KINDS, [null, "Other"]].map(([kind, title]) => ({
+    kind, title,
+    blocks: others.filter((it) => (kind ? it.kind === kind : !KINDS.some(([k]) => k === it.kind))).map((it) => ({ it, unit: unitOf(pid, String(it.id), titleOf(it), [it]) })),
+  })).filter((g) => g.blocks.length);
+  return { pid, items, stations, others, groups, units: [...stations.map((st) => st.unit), ...groups.flatMap((g) => g.blocks.map((b) => b.unit))] };
+}
+/** The decisions a paper's results ask for, as the browser keeps them. */
+export const paperUnits = (folder, results) => paperLayout(folder, results).units.map(slimUnit);
+
+const MAP_SLOT = '<section class="rmap" aria-label="Your review"></section>';
+function paperHtml(ctx, paper, idx) {
+  const { folder, results, baseResults, tree } = paper;
+  const { pid, items, stations, others, groups, units } = paperLayout(folder, results, tree);
+  if (baseResults) {
+    const old = new Map((baseResults.items || []).map((it) => [it && it.id, JSON.stringify(it)]));
+    for (const it of items) it._changed = old.get(it.id) !== JSON.stringify(it);
+  }
+  const meta = results.paper || {};
+  const counts = Object.fromEntries(VERDICTS.map((v) => [v, items.filter((it) => it.verdict === v).length]));
+  const block = ({ it, unit }, head) => {
     const why = whyHtml(ctx, folder, unit);
     return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}` +
       `${boxHtml(unit, why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : "")}</div>`;
   };
-  const kinds = [["table", "Tables"], ["value", "Numbers in the text"], ["code_check", "Checks"]];
   let numbers = "";
-  for (const [kind, title] of kinds) {
-    const its = others.filter((it) => it.kind === kind);
-    if (its.length) numbers += `<h3 class="ghead">${title} <span class="count">${its.length}</span></h3>` + its.map((it) => block(it, kind === "table")).join("");
+  for (const g of groups) {
+    numbers += `<h3 class="ghead">${g.title}${g.kind ? ` <span class="count">${g.blocks.length}</span>` : ""}</h3>` + g.blocks.map((b) => block(b, g.kind === "table")).join("");
   }
-  const rest = others.filter((it) => !kinds.some(([k]) => k === it.kind));
-  if (rest.length) numbers += '<h3 class="ghead">Other</h3>' + rest.map((it) => block(it, false)).join("");
   const doi = String(meta.doi || "");
   let cite = esc(meta.citation || "");
   if (/^10\.\d{4,9}\/\S+$/.test(doi)) cite = `<a href="https://doi.org/${esc(doi)}" rel="noopener">${cite || esc(doi)}</a>`;
@@ -629,10 +707,10 @@ function paperHtml(ctx, paper, idx) {
   const nav = `<nav class="tabs" aria-label="Sections"><a href="#figures-${idx}">Figures <b>${stations.length}</b></a>` +
     `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#code">Code</a></nav>`;
   const html = `<section class="paper" data-paper="${esc(pid)}"><div class="phead"><p class="pid"><span class="pmc">${esc(pid)}</span> ${cite}</p>` +
-    `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}</div>` +
+    `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}${idx === 0 ? MAP_SLOT : ""}</div>` +
     `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((st) => stationHtml(ctx, folder, st)).join("") || '<p class="note">No figure items.</p>'}</section>` +
     `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section></section>`;
-  return [html, { id: pid, title: String(meta.title || folder), counts, keys }];
+  return [html, { id: pid, title: String(meta.title || folder), counts, units: units.map(slimUnit) }];
 }
 
 /**
@@ -654,17 +732,17 @@ export function reviewHtml(review, ctx) {
   if (!review.papers.length) {
     sections.push(`<section class="paper"><div class="phead"><h1>${esc(review.title || review.label)}</h1>` +
       '<p class="note">No Paper2Repro results.json in this change, so there is no paper to lay it out by. The changed files are below.</p></div></section>');
-    summaries.push({ id: "", title: review.title || review.label, counts: {}, keys: [] });
+    summaries.push({ id: "", title: review.title || review.label, counts: {}, units: [] });
   }
   const notes = (review.notes || []).map((n) => `<p class="warn">${esc(n)}</p>`).join("");
-  let outsideBox = "", outsideKey = null;
+  let outsideBox = "", outside = null;
   if (shared.length) {
     const unit = {
       key: cardKey(review.repo, review.label, "outside", ...shared.map((f) => f.path + f.added + f.deleted)),
       title: review.papers.length ? "Changes outside the paper folder" : "Changed files", ask: "ok", given: "", givenText: "", items: [], notes,
     };
     outsideBox = boxHtml(unit);
-    outsideKey = unit.key;
+    outside = slimUnit(unit);
   }
   const [code, by] = codeHtml(ctx, review.files, folders, outsideBox);
   const bits = [];
@@ -679,32 +757,65 @@ export function reviewHtml(review, ctx) {
     '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Agree with the pull request on these</button></div></main>' +
     '<div class="deckbar"><button type="button" class="dprev" aria-label="Previous card">‹</button><span class="dtitle"></span><span class="dcount"></span>' +
     '<button type="button" class="dnext" aria-label="Next card">›</button><button type="button" class="linkish dpage">Whole page</button><span class="dprog"><i></i></span></div>' +
-    '<div class="deckend" hidden><div><p class="dhead">That was the last card</p><p class="dsum"></p>' +
+    `<div class="deckend" hidden><div><p class="dhead">That was the last card</p><p class="dsum"></p>${MAP_SLOT}` +
     '<p><button type="button" class="btn dfirst">Go to the first one not decided</button></p>' +
     '<p><button type="button" class="btn rest">Agree with the pull request on these</button></p>' +
     `<p><button type="button" class="copy">Copy review</button> <a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></p></div></div>` +
-    '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided</span>' +
+    '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided<span class="chg"></span></span>' +
     '<button type="button" class="btn next">Next not decided</button><button type="button" class="btn dcards">Cards</button><span class="grow"></span>' +
     `<button type="button" class="copy">Copy review</button><a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></div></div>`;
   const lines = Object.fromEntries(Object.entries(by).map(([cat, fs]) => [cat, fs.reduce((n, f) => n + f.added + f.deleted, 0)]));
-  const keys = summaries.flatMap((p) => p.keys).concat(outsideKey ? [outsideKey] : []);
-  return { html, summary: { papers: summaries, keys, files: review.files.length, lines, sha: review.sha } };
+  const units = summaries.flatMap((p) => p.units).concat(outside ? [outside] : []);
+  return { html, summary: { papers: summaries, units, keys: units.map((u) => u.key), files: review.files.length, lines, sha: review.sha } };
+}
+
+const HOME_GROUPS = [["todo", "To review"], ["changes", "Changes requested"], ["agreed", "Agreed"]];
+const STATE = { // state of standing(): [the group it is listed in, its name on the card]
+  new: ["todo", "Not opened"], seen: ["todo", "Not started"], started: ["todo", "In progress"], updated: ["todo", "Changed since your review"],
+  changes: ["changes", "Changes requested"], agreed: ["agreed", "Agreed"], reviewed: ["agreed", "Reviewed"],
+};
+/** What a card of the first page says of the reviewer's own decisions. */
+function standingFacts(st) {
+  if (st.state === "new") return '<span class="progress">Not opened yet</span>';
+  let out = `<span class="progress"><b>${st.done}</b> of <b>${st.all}</b> decided${st.state === "updated" ? " before it changed" : ""}</span>`;
+  if (st.state === "updated" && st.again !== undefined) out += `<span class="ragain">${st.again ? `${st.again} to decide again` : "nothing in the paper to decide again"}</span>`;
+  if (st.change.length) {
+    const names = st.change.filter(Boolean), more = st.change.length - Math.min(names.length, 4);
+    out += `<span class="rchange">${st.change.length} to change${names.length ? `: ${esc(names.slice(0, 4).join(", "))}${more ? ` and ${more} more` : ""}` : ""}</span>`;
+  }
+  if (st.sent) {
+    const text = { yes: `Review copied ${st.sent.when}`, stale: "Decisions changed since you copied the review", no: "Review not copied yet" }[st.sent.state];
+    out += `<span class="rsent${st.sent.state === "yes" ? "" : " todo"}">${esc(text)}</span>`;
+  }
+  return out;
+}
+/**
+ * The open pull requests, apart by where each stands for this reviewer: to review, changes
+ * requested, agreed. mine: number → standing(), with sent {state, when} and again where known.
+ */
+export function pullsHtml(repo, pulls, mine = new Map()) {
+  const [owner, name] = repo.split("/");
+  const stOf = (p) => mine.get(p.number) || { state: "new", done: 0, all: 0, change: [] };
+  const card = (p) => {
+    const st = stOf(p), who = [p.user && p.user.login, (p.updated_at || "").slice(0, 10)].filter(Boolean).join(" · ");
+    return `<a class="rcard s-${st.state}" href="${routeOf({ owner, repo: name, kind: "pull", number: p.number })}" data-number="${p.number}" data-sha="${esc(p.head && p.head.sha)}" data-title="${esc(p.title)}" data-ref="${esc(p.head && p.head.ref)}">` +
+      `<div class="rtop"><span class="pmc"></span><span class="rref">#${p.number}</span><span class="grow"></span><span class="rstate">${STATE[st.state][1]}</span></div><h2>${esc(p.title)}</h2><div class="rbar"></div>` +
+      `<p class="facts">${standingFacts(st)}</p><p class="who">${esc(who)} ${p.draft ? '<span class="chip">draft</span>' : ""}</p></a>`;
+  };
+  return HOME_GROUPS.map(([key, title]) => {
+    const ps = pulls.filter((p) => STATE[stOf(p).state][0] === key);
+    return ps.length ? `<section class="rgroup g-${key}"><h3 class="ghead">${title} <span class="count">${ps.length}</span></h3><div class="rgrid">${ps.map(card).join("")}</div></section>` : "";
+  }).join("");
 }
 
 /** The first page: a box to paste a link into, and what is open in the usual repository. */
-export function homeHtml({ repo, pulls, recent, error }) {
-  const cards = (pulls || []).map((p) => {
-    const link = { owner: repo.split("/")[0], repo: repo.split("/")[1], kind: "pull", number: p.number };
-    const who = [p.user && p.user.login, (p.updated_at || "").slice(0, 10)].filter(Boolean).join(" · ");
-    return `<a class="rcard" href="${routeOf(link)}" data-number="${p.number}" data-sha="${esc(p.head && p.head.sha)}" data-title="${esc(p.title)}" data-ref="${esc(p.head && p.head.ref)}">` +
-      `<div class="rtop"><span class="pmc"></span><span class="rref">#${p.number}</span></div><h2>${esc(p.title)}</h2><div class="rbar"></div>` +
-      `<p class="facts"><span class="progress"></span></p><p class="who">${esc(who)} ${p.draft ? '<span class="chip">draft</span>' : ""}</p></a>`;
-  }).join("");
+export function homeHtml({ repo, pulls, recent, error, mine }) {
+  const list = pulls && pulls.length ? pullsHtml(repo, pulls, mine) : `<p class="note home-note">${pulls ? "Nothing is open." : "Loading…"}</p>`;
   const recents = (recent || []).map((r) => `<li><a href="${esc(r.route)}">${esc(r.label)}</a></li>`).join("");
   return '<header class="top"><div class="wrap"><span class="refline">Reproduction review</span><span class="grow"></span><button type="button" class="linkish token">GitHub token</button></div></header>' +
     '<main class="wrap"><div class="phead"><h1>Paste a pull request or branch link</h1>' +
     '<form class="paste"><input type="text" name="link" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://github.com/owner/repo/pull/40" aria-label="Pull request or branch link"><button type="submit">Review</button></form>' +
     `<p class="note paste-error" role="alert">${esc(error || "")}</p></div>` +
-    (repo ? `<section class="sec"><h2>Open in ${esc(repo)} <span class="count">${pulls ? pulls.length : ""}</span></h2><div class="rgrid">${cards || `<p class="note home-note">${pulls ? "Nothing is open." : "Loading…"}</p>`}</div></section>` : "") +
+    (repo ? `<section class="sec"><h2>Open in ${esc(repo)} <span class="count">${pulls ? pulls.length : ""}</span></h2><div class="pulls">${list}</div></section>` : "") +
     (recents ? `<section class="sec"><h2>Recent</h2><ul class="recent">${recents}</ul></section>` : "") + "</main>";
 }

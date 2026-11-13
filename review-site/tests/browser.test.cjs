@@ -45,6 +45,17 @@ const picturesLoaded = (page) => page.evaluate(async () => {
   return { all: imgs.length, ok: imgs.filter((i) => i.naturalWidth > 0).length };
 });
 
+/** The first page as its groups: [[heading, ["#7 its state", ...]], ...]. */
+const groupsOf = (page) => page.locator(".rgroup").evaluateAll((gs) => gs.map((g) => [g.querySelector(".ghead").textContent, [...g.querySelectorAll(".rcard")].map((c) => `#${c.dataset.number} ${c.querySelector(".rstate").textContent}`)]));
+/** What the browser keeps, changed as an older version or another day would have left it. */
+const kept = (page, fn, arg) => page.evaluate(([code, a]) => {
+  const sumKey = "rv:sum:o/r:#7", sum = JSON.parse(localStorage[sumKey]);
+  const say = (title, v) => { const k = `rv:o/r:${sum.units.find((u) => u.title === title).key}`; localStorage[k] = JSON.stringify({ ...JSON.parse(localStorage[k] || "{}"), v }); };
+  new Function("sum", "say", "arg", code)(sum, say, a);
+  localStorage[sumKey] = JSON.stringify(sum);
+}, [`(${fn})(sum, say, arg)`, arg]);
+const home = async (page, base) => { await page.goto(base); await page.waitForSelector(".rcard .vbar"); };
+
 async function small(browser, base) {
   const repo = makeRepo();
   const mock = makeMock({ clone: repo.clone, owner: "o", repo: "r", pulls: repo.pulls, branches: repo.branches });
@@ -59,6 +70,7 @@ async function small(browser, base) {
     await page.waitForSelector(".rcard .vbar");
     assert.equal(await page.locator(".rcard .pmc").textContent(), "PMC1");
     assert.equal(await page.locator(".rcard .progress").textContent(), "Not opened yet");
+    assert.deepEqual(await groupsOf(page), [["To review 1", ["#7 Not opened"]]]);
   });
 
   await step("a link that is not GitHub's is refused with a reason", async () => {
@@ -128,6 +140,16 @@ async function small(browser, base) {
     assert.equal(await drawing.locator(".state").textContent(), "Not OK");
     assert.equal(await page.locator(".bar .done").textContent(), "3");
     assert.equal(await page.locator(".bar .all").textContent(), "5");
+    // what is decided shows: in the bar, at the top of its figure or table, and in the list of the review
+    assert.equal(await page.locator(".bar .chg").textContent(), " · 2 to change");
+    assert.deepEqual([await page.locator("#fig-1").getAttribute("data-mine"), await page.locator(".nblock").first().getAttribute("data-mine"), await page.locator(".nblock").nth(1).getAttribute("data-mine")], ["change", "same", ""]);
+    const row = (cls) => page.locator(`.phead .rmap .m-${cls} .mchip`).allTextContents();
+    assert.deepEqual(await row("open"), ["Text", "Changes outside the paper folder"]);
+    assert.deepEqual(await row("change"), ["Fig. 1: Partly → Agrees with a comment", "Fig. 2: Not OK with a comment"]);
+    assert.deepEqual(await row("same"), ["Table 1"]);
+    assert.equal(await page.locator(".phead .rmap .mfoot").count(), 0);
+    await page.locator(".phead .rmap .m-same .mchip").click(); // a name goes to its table
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Table 1");
     await page.locator(".bar .copy").click();
     await page.waitForTimeout(150);
     const text = await page.evaluate(() => navigator.clipboard.readText());
@@ -136,6 +158,7 @@ async function small(browser, base) {
     assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
     assert.match(text, /\*\*Agreed \(1\):\*\* Table 1 \(Differs\)/);
     assert.match(text, /\*\*Not decided \(2\)\*\*\n- \*\*Text\*\*\n- \*\*Changes outside the paper folder\*\*/);
+    assert.match(await page.locator(".phead .rmap .mfoot").textContent(), /^Review copied .+\. Nothing changed since\.$/);
   });
 
   await step("the next one not decided is one click away, and the rest can follow the pull request", async () => {
@@ -159,6 +182,10 @@ async function small(browser, base) {
     await page.waitForSelector(".rcard .progress b");
     assert.equal(await page.locator(".rcard .progress").textContent(), "5 of 5 decided");
     assert.match(await page.locator(".recent").textContent(), /o\/r #7 · PMC1/);
+    // all decided, two of them to change, and decided on after the review was copied
+    assert.deepEqual(await groupsOf(page), [["Changes requested 1", ["#7 Changes requested"]]]);
+    assert.equal(await page.locator(".rcard .rchange").textContent(), "2 to change: Fig. 1, Fig. 2");
+    assert.equal(await page.locator(".rcard .rsent").textContent(), "Decisions changed since you copied the review");
   });
 
   await step("a decision saved by an older version keeps its comment and asks again", async () => {
@@ -174,6 +201,40 @@ async function small(browser, base) {
     assert.equal(await page.locator(".bar .done").textContent(), "4");
     await page.locator(".back").click();
     await page.waitForSelector(".rcard");
+    assert.deepEqual(await groupsOf(page), [["To review 1", ["#7 In progress"]]]);
+    assert.equal(await page.locator(".rcard .facts").innerText(), "4 of 5 decided\n2 to change: Fig. 1, Fig. 2");
+  });
+
+  await step("the first page keeps apart what is to review, where changes are requested and what is agreed", async () => {
+    await page.locator(".rcard").click();
+    await page.waitForSelector(".dbox");
+    await page.locator('#code .dbox button[data-v="ok"]').click();
+    await page.locator(".bar .copy").click();
+    await page.locator(".back").click();
+    await page.waitForSelector(".rcard .vbar");
+    assert.deepEqual(await groupsOf(page), [["Changes requested 1", ["#7 Changes requested"]]]);
+    assert.match(await page.locator(".rcard .rsent").textContent(), /^Review copied /);
+    // a review kept by an older version did not keep what the pull request says: the results tell that Fig. 1 is a change
+    await kept(page, (sum, say) => { say("Fig. 2", "ok"); delete sum.units; });
+    await home(page, base);
+    await page.waitForFunction(() => document.querySelector(".rcard .rstate").textContent === "Changes requested");
+    assert.equal(await page.locator(".rcard .rchange").textContent(), "1 to change: Fig. 1");
+    assert.equal(await page.locator(".rcard .rsent").textContent(), "Decisions changed since you copied the review");
+    assert.equal(await page.locator(".rcard .pmc").textContent(), "PMC1");
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage["rv:sum:o/r:#7"]).units.length), 5);
+    // everything as the pull request says
+    await kept(page, (sum, say) => say("Fig. 1", "partly"));
+    await home(page, base);
+    assert.deepEqual(await groupsOf(page), [["Agreed 1", ["#7 Agreed"]]]);
+    assert.equal(await page.locator(".rcard .rchange").count(), 0);
+    // the pull request changes after that: it is to review again, and the card says how much
+    await kept(page, (sum, say, sha) => { sum.was = sum.sha; sum.sha = sha; }, "0".repeat(40));
+    await home(page, base);
+    await page.waitForSelector(".rcard .ragain");
+    assert.deepEqual(await groupsOf(page), [["To review 1", ["#7 Changed since your review"]]]);
+    assert.equal(await page.locator(".rcard .facts").innerText(), "5 of 5 decided before it changed\nnothing in the paper to decide again");
+    await kept(page, (sum) => { sum.sha = sum.was; });
+    await home(page, base);
   });
 
   await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {
@@ -308,6 +369,10 @@ async function small(browser, base) {
     await page.locator(".deckend .copy").click();
     await page.waitForTimeout(150);
     assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
+    // the last card lists the decisions apart, and a name goes to its card
+    assert.deepEqual(await page.locator(".deckend .rmap .m-change .mchip").allTextContents(), ["Fig. 2: Not OK with a comment"]);
+    await page.locator(".deckend .rmap .m-change .mchip").click();
+    assert.deepEqual([await title(), await count()], ["Fig. 2", "2 / 5"]);
     // the whole page is one tap away, and so are the cards again
     await page.locator(".dprev").click();
     await page.locator(".dpage").click();
