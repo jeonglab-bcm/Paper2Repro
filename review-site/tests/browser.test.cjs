@@ -32,6 +32,12 @@ async function open(browser, mock, viewport = { width: 1280, height: 1000 }) {
   const ctx = await browser.newContext({ viewport, permissions: ["clipboard-read", "clipboard-write"] });
   await ctx.route(/^https:\/\/(api\.github\.com|raw\.githubusercontent\.com)\//, mock.handle);
   const page = await ctx.newPage();
+  // how the app asks GitHub: the cache mode of each request to the API
+  await page.addInitScript(() => {
+    const real = window.fetch;
+    window.asked = [];
+    window.fetch = (url, init) => { if (String(url).startsWith("https://api.github.com/")) window.asked.push((init && init.cache) || "default"); return real(url, init); };
+  });
   page.errors = [];
   page.on("pageerror", (err) => page.errors.push(String(err)));
   page.on("console", (m) => { if (m.type() === "error" && !/404|403/.test(m.text())) page.errors.push(m.text()); });
@@ -235,6 +241,52 @@ async function small(browser, base) {
     assert.equal(await page.locator(".rcard .facts").innerText(), "5 of 5 decided before it changed\nnothing in the paper to decide again");
     await kept(page, (sum) => { sum.sha = sum.was; });
     await home(page, base);
+  });
+
+  await step("a page left open asks GitHub again when the reader comes back to it", async () => {
+    // ten minutes pass, and the reader comes back to the tab
+    const comeBackLater = () => page.evaluate(() => { Date.now = ((now) => () => now() + 600000)(Date.now); window.dispatchEvent(new Event("focus")); });
+    const first = await page.locator(".rcard").getAttribute("data-sha");
+    // GitHub is asked past the browser's cache, which keeps its answers for a minute
+    assert.deepEqual(await page.evaluate(() => [...new Set(window.asked)]), ["no-cache"]);
+    // coming back at once asks nothing
+    let calls = mock.state.calls;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await page.waitForTimeout(200);
+    assert.equal(mock.state.calls, calls);
+    // the first page: the pull request got a commit, so its card is drawn again and is to review again
+    const second = repo.push();
+    assert.notEqual(second, first);
+    await comeBackLater();
+    await page.waitForSelector(`.rcard[data-sha="${second}"] .ragain`);
+    assert.deepEqual(await groupsOf(page), [["To review 1", ["#7 Changed since your review"]]]);
+    // a review opened from there is at that commit, with the files of that commit
+    await page.locator(".rcard").click();
+    await page.waitForSelector(".dbox");
+    assert.match(await page.locator(".refline").textContent(), new RegExp(second.slice(0, 7)));
+    assert.equal(await page.locator('details.file[data-path$="more1.py"]').count(), 1);
+    assert.equal(await page.locator(".bar .done").textContent(), "5");
+    // a review that is open: a new commit is said, and the page waits for the reader
+    const third = repo.push();
+    await comeBackLater();
+    await page.waitForSelector(".stale");
+    assert.equal(await page.locator(".stale span").textContent(), `There is a new commit, ${third.slice(0, 7)}. This page shows ${second.slice(0, 7)}. Your decisions are kept.`);
+    assert.match(await page.locator(".refline").textContent(), new RegExp(second.slice(0, 7)));
+    await comeBackLater(); // said once
+    await page.waitForTimeout(200);
+    assert.equal(await page.locator(".stale").count(), 1);
+    // "Later" puts it away, and it is said again the next time
+    await page.locator(".stale .later").click();
+    assert.equal(await page.locator(".stale").count(), 0);
+    await comeBackLater();
+    await page.waitForSelector(".stale");
+    await page.locator(".stale .now").click();
+    await page.waitForFunction((sha) => document.querySelector(".refline")?.textContent.includes(sha), third.slice(0, 7));
+    assert.equal(await page.locator(".stale").count(), 0);
+    assert.equal(await page.locator('details.file[data-path$="more2.py"]').count(), 1);
+    assert.equal(await page.locator(".bar .done").textContent(), "5");
+    await home(page, base);
+    assert.deepEqual(await groupsOf(page), [["Agreed 1", ["#7 Agreed"]]]);
   });
 
   await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {

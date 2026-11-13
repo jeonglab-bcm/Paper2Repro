@@ -83,8 +83,19 @@ function makeRepo() {
   git(up, "checkout", "-q", "main");
   const clone = path.join(dir, "clone");
   execFileSync("git", ["clone", "-q", up, clone], { stdio: "ignore" });
+  // a new commit on the pull request's branch, as its author would push; gives its sha
+  let pushes = 0;
+  const push = () => {
+    git(up, "checkout", "-q", "paper");
+    write(`PMC1/package/src/m/more${++pushes}.py`, "y = 2\n");
+    git(up, "add", "-A");
+    git(up, "commit", "-q", "-m", `more ${pushes}`);
+    git(up, "checkout", "-q", "main");
+    execFileSync("git", ["-C", clone, "fetch", "-q", "origin"], { stdio: "ignore" });
+    return execFileSync("git", ["-C", clone, "rev-parse", "origin/paper"]).toString().trim();
+  };
   return {
-    dir, clone,
+    dir, clone, push,
     pulls: [{ number: 7, title: "Reproduce PMC1: a paper", user: { login: "someone" }, head: { ref: "paper" }, updated_at: "2026-11-09T00:00:00Z", git: "origin/paper" }],
     branches: { side: "origin/side", paper: "origin/paper", "side/PMC1": null },
   };

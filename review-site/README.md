@@ -62,6 +62,20 @@ a pull request you reviewed on one is "Not opened" on the other.
 A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 `?url=<a GitHub link>` opens the same page.
 
+## The latest commit
+
+A review is read at the commit the pull request has when you open it: the page asks GitHub each
+time, and does not take the answer from the browser's cache, which keeps GitHub's answers for a
+minute. The commit is in the bar at the top.
+
+A page that stays open asks again when you come back to its tab or window, at most every 5
+minutes, or every minute with a GitHub token.
+
+- **The first page** is drawn again when the list changed. A pull request with a new commit
+  moves to **To review** as "Changed since your review".
+- **A review** says "There is a new commit" with **Show the latest** and **Later**. It does not
+  redraw by itself, as you may be in the middle of it. Your decisions are kept.
+
 A decision is kept by what it is about. When the pull request changes, a figure or table whose
 verdicts and explanations did not change keeps your decision, and one that changed asks again.
 
@@ -92,7 +106,8 @@ changed files (3 or 4 requests a review), and `raw.githubusercontent.com` for `r
 the pictures and the code. There is no server and no build for each pull request.
 
 - **Request limit.** Without a token GitHub allows 60 API requests an hour for each network
-  address, which an office can share. **GitHub token** on the first page saves a token in your
+  address, which an office can share. Opening the first page is 1 request, a review 3 or 4 the
+  first time and 1 after that while its commit is the same, and asking for a new commit is 1. **GitHub token** on the first page saves a token in your
   browser; it goes only to `api.github.com` and lifts the limit to 5,000.
 - **Private repositories** need that token. This path is written but not tested.
 - **A branch** shows its first 300 changed files (GitHub's limit for a comparison). A pull

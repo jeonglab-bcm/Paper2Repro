@@ -461,3 +461,8 @@ body.deck .current { border: 0; }
 body.deck .deckend:not([hidden]) { align-items: flex-start; overflow: auto; }
 body.deck .deckend > div { width: 100%; margin: auto 0; }
 .deckend .rmap { text-align: left; }
+
+/* a page left open: a new commit is said, above everything, also above a card of a phone */
+.stale { position: fixed; z-index: 40; top: 8px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 16px); display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; padding: 8px 10px 8px 14px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 14px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
+.stale .btn { min-height: 32px; background: var(--bg); color: var(--ink); border-color: var(--bg); }
+.stale .later { color: inherit; opacity: .8; min-height: 32px; padding: 0 4px; }
