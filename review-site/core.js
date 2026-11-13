@@ -336,37 +336,8 @@ function scoreBar(p) {
   if (p.control) marks += `<i class="tick ctl" style="left:${(p.control.score * 100).toFixed(1)}%" title="Best control (${esc(p.control.name)}): ${(p.control.score * 100).toFixed(0)}%"></i>`;
   return `<span class="score" title="Share of the curve within ${p.tol} px"><span class="track"><i class="fill" style="width:${(p.s * 100).toFixed(1)}%"></i>${marks}</span><b>${(p.s * 100).toFixed(0)}%</b></span>`;
 }
-function seriesSvg(points) {
-  const xs = points.map((p) => p[0]), ys = points.flatMap((p) => [p[1], p[2]]);
-  let lo = Math.min(...ys), hi = Math.max(...ys);
-  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.05 || 1;
-  lo -= pad; hi += pad;
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), W = 300, H = 112, L = 40, R = 8, T = 8, B = 18;
-  const px = (x) => L + ((x - x0) / (x1 - x0 || 1)) * (W - L - R);
-  const py = (y) => T + ((hi - y) / (hi - lo || 1)) * (H - T - B);
-  const line = (i, cls) => `<g class="${cls}"><polyline points="${points.map((p) => `${px(p[0]).toFixed(1)},${py(p[i]).toFixed(1)}`).join(" ")}"/>${points.map((p) => `<circle cx="${px(p[0]).toFixed(1)}" cy="${py(p[i]).toFixed(1)}" r="1.8"/>`).join("")}</g>`;
-  return `<svg viewBox="0 0 ${W} ${H}" class="series" role="img"><line class="ax" x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}"/>` +
-    `<text class="tk" x="${L - 4}" y="${(py(hi - pad) + 3).toFixed(1)}" text-anchor="end">${fmtG(hi - pad, 3)}</text>` +
-    `<text class="tk" x="${L - 4}" y="${(py(lo + pad) + 3).toFixed(1)}" text-anchor="end">${fmtG(lo + pad, 3)}</text>` +
-    `<text class="tk" x="${L}" y="${H - 5}">${x0}</text><text class="tk" x="${W - R}" y="${H - 5}" text-anchor="end">${x1}</text>` +
-    `${line(1, "s-paper")}${line(2, "s-ours")}</svg>`;
-}
-/** How to draw a list of fields: as series, as the paper's table, or as a list. */
+/** How to show a list of fields: as the paper's table, or as a list. */
 export function shapeFields(fs) {
-  const series = new Map();
-  for (const f of fs) {
-    if (f.a === null || f.b === null) continue;
-    const m = /^(.*?\D)\s*(-?\d+(?:\.\d+)?)$/.exec(f.name);
-    if (!m) continue;
-    const k = m[1].trim();
-    if (!series.has(k)) series.set(k, []);
-    series.get(k).push([Number(m[2]), f.a, f.b]);
-  }
-  const good = new Map();
-  for (const [k, v] of series) {
-    if (v.length >= 4 && new Set(v.map((p) => p[0])).size === v.length) good.set(k, v.sort((a, b) => a[0] - b[0]));
-  }
-  if (good.size && [...good.values()].reduce((n, v) => n + v.length, 0) >= 0.8 * fs.length) return ["series", good];
   const rows = [], cols = [], cells = new Map();
   let ok = true;
   for (const f of fs) {
@@ -392,10 +363,6 @@ function fieldsHtml(item) {
   const fs = fieldsOf(item);
   if (!fs.length) return "";
   const [kind, data] = shapeFields(fs);
-  if (kind === "series") {
-    const charts = [...data].map(([name, pts]) => `<figure class="chart"><figcaption>${esc(name)}</figcaption>${seriesSvg(pts)}</figure>`).join("");
-    return `<div class="charts">${charts}</div><div class="key"><span class="k-paper">paper</span><span class="k-ours">ours</span></div>`;
-  }
   if (kind === "matrix") {
     const { rows, cols, cells } = data;
     const body = rows.map((r) => `<tr><th scope="row">${esc(r)}</th>${cols.map((c) => cellHtml(cells.get(r + "\x1f" + c))).join("")}</tr>`).join("");
@@ -437,8 +404,13 @@ function stationHtml(ctx, folder, st) {
   const dots = VERDICTS.filter((v) => counts[v]).map((v) => `<i class="dot v-${v}" title="${counts[v]} ${VERDICT_LABEL[v].toLowerCase()}"></i>`.repeat(counts[v])).join("");
   let views = st.renders.map((r) => (st.renders.length > 1 ? `<p class="rlabel">${esc(r.label)}</p>` : "") + viewerHtml(ctx, r, st.title)).join("");
   if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub">${imgTag(ctx, st.publishedOnly, st.title + ", published")}<figcaption>Published; no render of ours</figcaption></figure></div></div>`;
+  // what the pull request measured for each curve, and why: there for who wants it, closed, below the question.
+  // A figure with no picture at all has nothing else to show, so it starts open.
+  const n = st.items.length;
+  const details = `<details class="info"${views ? "" : " open"}><summary>Details: what the pull request measured${n > 1 ? ` for its ${n} results` : ""}, and why</summary>` +
+    `<div class="rows">${st.items.map(itemRow).join("")}</div>${whyHtml(ctx, folder, st.unit)}</details>`;
   return `<section class="station" id="fig-${esc(st.key)}"><header class="shead"><h3>${esc(st.title)}</h3><span class="dots">${dots}</span></header>` +
-    `<div class="sgrid">${views ? `<div class="views">${views}</div>` : ""}<div class="rows">${st.items.map(itemRow).join("")}</div></div>${boxHtml(ctx, folder, st.unit)}</section>`;
+    `${views ? `<div class="views">${views}</div>` : ""}${boxHtml(st.unit, details)}</section>`;
 }
 const stripPath = (evidence) => String(evidence ?? "").replace(/^\S+\.\w+(?: \([^)]*\))?:\s+/, "");
 function evidenceHtml(ctx, folder, evidence) {
@@ -488,14 +460,14 @@ function whyHtml(ctx, folder, unit) {
   return out.join("");
 }
 const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author"></textarea>';
-/** The decision that sits right below a figure or a table: why it is as it is, the question, the comment. */
-function boxHtml(ctx, folder, unit) {
+/** The decision that sits right below a figure or a table: the question, the comment, then the closed details. */
+function boxHtml(unit, details = "") {
   const ask = unit.ask === "verdict"
     ? `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>. Your verdict${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}:</span>` +
       `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>`
     : '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
   return `<div class="dbox" id="d-${unit.key}" data-key="${unit.key}" data-title="${esc(unit.title)}" data-ask="${unit.ask}" data-given="${esc(unit.given)}" data-given-text="${esc(unit.givenText)}" tabindex="-1">` +
-    `${unit.notes || ""}${whyHtml(ctx, folder, unit)}<footer class="decide">${ask}<span class="state" aria-live="polite"></span>${COMMENT}</footer></div>`;
+    `${unit.notes || ""}<footer class="decide">${ask}<span class="state" aria-live="polite"></span>${COMMENT}</footer>${details}</div>`;
 }
 export const fileAnchor = (path) => cardKey("file", path).slice(0, 10);
 const delta = (f) => `<span class="delta"><b class="add">+${f.added}</b>${f.deleted ? ` <b class="del">−${f.deleted}</b>` : ""}</span>`;
@@ -624,7 +596,9 @@ function paperHtml(ctx, paper, idx) {
   const block = (it, head) => {
     const unit = unitOf(pid, String(it.id), titleOf(it), [it]);
     keys.push(unit.key);
-    return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}${boxHtml(ctx, folder, unit)}</div>`;
+    const why = whyHtml(ctx, folder, unit);
+    return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}` +
+      `${boxHtml(unit, why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : "")}</div>`;
   };
   const kinds = [["table", "Tables"], ["value", "Numbers in the text"], ["code_check", "Checks"]];
   let numbers = "";
@@ -676,7 +650,7 @@ export function reviewHtml(review, ctx) {
       key: cardKey(review.repo, review.label, "outside", ...shared.map((f) => f.path + f.added + f.deleted)),
       title: review.papers.length ? "Changes outside the paper folder" : "Changed files", ask: "ok", given: "", givenText: "", items: [], notes,
     };
-    outsideBox = boxHtml(ctx, "", unit);
+    outsideBox = boxHtml(unit);
     outsideKey = unit.key;
   }
   const [code, by] = codeHtml(ctx, review.files, folders, outsideBox);

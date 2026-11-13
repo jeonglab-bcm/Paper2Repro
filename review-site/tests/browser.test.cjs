@@ -98,12 +98,20 @@ async function small(browser, base) {
     assert.equal(await page.locator("#code .dbox").count(), 1);
     assert.deepEqual(await page.locator("h2").allTextContents(), ["Figures", "Tables and numbers", "Code"]);
     assert.deepEqual(await page.locator(".tabs a").evaluateAll((as) => as.map((a) => a.childNodes[0].textContent.trim())), ["Figures", "Tables and numbers", "Code"]);
-    // the decision of a figure is on the screen together with the figure
+    // a figure block is the pictures, then the question; what was measured and why stays closed
     const gap = await page.evaluate(() => {
       const st = document.querySelector("#fig-1"), box = st.querySelector(".dbox");
-      return Math.round(box.getBoundingClientRect().top - st.querySelector(".rows").getBoundingClientRect().bottom);
+      return Math.round(box.getBoundingClientRect().top - st.querySelector(".views").getBoundingClientRect().bottom);
     });
     assert.ok(gap >= 0 && gap < 40, `gap ${gap}`);
+    assert.equal(await page.locator("#fig-1 .irow").isVisible(), false);
+    assert.equal(await page.locator("svg").count(), 0);
+    await page.locator("#fig-1 details.info > summary").click();
+    assert.equal(await page.locator("#fig-1 .irow").isVisible(), true);
+    assert.match(await page.locator("#fig-1 details.info").textContent(), /Our curve is lower\./);
+    await page.locator("#fig-1 details.info > summary").click();
+    // a table shows its numbers, then the question
+    assert.equal(await page.locator("#i-table1 .matrix").isVisible(), true);
   });
 
   await step("a verdict of your own and a comment are kept and counted", async () => {

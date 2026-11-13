@@ -6,15 +6,17 @@ by files.
 A Paper2Repro pull request has tens of thousands of lines, and most of them are outputs. The
 page shows what a reviewer has to judge:
 
-- **Figures.** The published figure next to ours: side by side, swipe, blink or overlay. Each
-  curve has its score against the pass mark and the best control.
+- **Figures.** The published figure next to ours: side by side, swipe, blink or overlay.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
-- **The decision, right below each figure and each table.** Why the result is not a plain
-  match (the cause and what was tested, the choices the paper does not give, the values the
-  paper prints that contradict its own numbers), then the question: "The pull request says
-  Partly. Your verdict:" with **Agrees**, **Partly** and **Differs**, and a comment box. Where
-  there is nothing to judge (a figure that was not attempted, a check) the question is
-  **OK** or **Not OK**. There is no separate list of decisions.
+- **The decision, right below each figure and each table.** "The pull request says Partly.
+  Your verdict:" with **Agrees**, **Partly** and **Differs**, and a comment box. Where there is
+  nothing to judge (a figure that was not attempted, a check) the question is **OK** or
+  **Not OK**. There is no separate list of decisions.
+- **Details, closed.** One line below the question opens what the pull request measured (each
+  curve's score against the pass mark and the best control, the numbers) and why the result
+  is not a plain match (the cause and what was tested, the choices the paper does not give,
+  the values the paper prints that contradict its own numbers). The page draws no charts of
+  its own.
 - **Code.** The method and the analysis in full, changes outside the paper folder as a diff
   with its own OK or Not OK. Checks, tests and documents are linked. Outputs are counted and
   not shown.

@@ -46,16 +46,15 @@ test("results.json with NaN, as Python writes it, is read", () => {
   assert.equal(core.parseResults('{"no": "items"}'), null);
 });
 
-test("fields are laid out as the paper's table, a series, or a list", () => {
+test("fields are laid out as the paper's table, or as a list", () => {
   const [kind, { rows, cols, cells }] = core.shapeFields(core.fieldsOf(RESULTS.items[1]));
   assert.deepEqual([kind, rows, cols], ["matrix", ["A", "B"], ["ACC", "SN"]]);
   assert.ok(cells.get("A\x1fACC").error);
   assert.equal(cells.get("A\x1fSN").match, true);
   assert.equal(core.measureOf(RESULTS.items[1]), "2 of 3 as printed, 1 paper error");
-  const series = Array.from({ length: 6 }, (_, i) => ({ name: `ACC at LG ${i + 1}`, a: 0.7 + i / 100, b: 0.71, match: false, error: null }));
-  const [k2, data] = core.shapeFields(series);
-  assert.equal(k2, "series");
-  assert.equal(data.get("ACC at LG").length, 6);
+  // values along an axis are a list too: the page draws no charts of its own
+  const along = Array.from({ length: 6 }, (_, i) => ({ name: `ACC at LG ${i + 1}`, a: 0.7 + i / 100, b: 0.71, match: false, error: null }));
+  assert.equal(core.shapeFields(along)[0], "list");
   assert.equal(core.shapeFields([{ name: "one", a: 1, b: 1 }])[0], "list");
 });
 
@@ -160,20 +159,22 @@ test("each figure and each table has its decision right below it", () => {
   assert.equal((html.match(/<div class="dbox"/g) || []).length, 5); // Fig. 1, Fig. 2, Table 1, the number in the text, the files outside
   assert.equal(summary.keys.length, 5);
   const part = (from, to) => html.slice(html.indexOf(from), html.indexOf(to));
-  // Fig. 1: its cause and the question are inside its own block
+  // Fig. 1: the pictures, then the question; what was measured and why is closed, after the question
   const fig1 = part('id="fig-1"', 'id="fig-2"');
   assert.equal((fig1.match(/<div class="dbox"/g) || []).length, 1);
   assert.ok(fig1.includes('data-title="Fig. 1" data-ask="verdict" data-given="partly" data-given-text="Partly"'));
-  assert.ok(fig1.includes("Our curve is lower."));
-  assert.ok(fig1.includes("2 of 2 tested causes ruled out"));
   assert.ok(fig1.includes("The pull request says <b>Partly</b>. Your verdict:"));
-  assert.ok(fig1.indexOf('class="irow"') < fig1.indexOf('class="dbox"'));
-  // Fig. 2 was not attempted: there is no verdict to give
+  const order = ['class="viewer"', 'class="dbox"', 'class="decide"', '<details class="info">', 'class="irow"', "Our curve is lower.", "2 of 2 tested causes ruled out"].map((x) => fig1.indexOf(x));
+  assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
+  assert.ok(!html.includes("<svg") && !html.includes('class="chart"')); // no charts drawn by the page
+  // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
   const fig2 = part('id="fig-2"', 'id="numbers-0"');
   assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict"));
-  // Table 1: the choice it rests on and the paper's own error are with it
+  assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
+  // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
   const table = part('id="i-table1"', 'id="i-text.n"');
   assert.ok(table.includes("The pull request says <b>Differs</b>. Your verdict:"));
+  assert.ok(table.indexOf('class="matrix"') < table.indexOf('class="decide"') && table.indexOf('class="decide"') < table.indexOf("<summary>Details: why</summary>"));
   assert.ok(table.includes("Within 2 points."));
   assert.ok(table.includes("1 choice the paper does not give") && table.includes("UniRef100 for nr"));
   assert.ok(table.includes("1 value the paper prints that does not follow from its own numbers") && table.includes("79.91, not 79.96"));
