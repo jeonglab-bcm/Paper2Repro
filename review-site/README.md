@@ -6,7 +6,9 @@ by files.
 A Paper2Repro pull request has tens of thousands of lines, and most of them are outputs. The
 page shows what a reviewer has to judge:
 
-- **Figures.** The published figure next to ours: side by side, swipe, blink or overlay.
+- **Figures.** Three pictures at once, each named above it: the **Original** (the published
+  figure), **Ours**, and the **Overlap** (both drawn on top of each other). The overlap can be
+  enlarged, and the original and ours can be swiped or blinked.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
 - **The decision, right below each figure and each table.** "The pull request says Partly.
   Your verdict:" with **Agrees**, **Partly** and **Differs**, and a comment box. Where there is

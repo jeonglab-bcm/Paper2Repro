@@ -176,10 +176,16 @@ async function small(browser, base) {
     await page.waitForSelector(".rcard");
   });
 
-  await step("the figure can be swiped, blinked and overlaid", async () => {
+  await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {
     await page.locator(".rcard").click();
     await page.waitForSelector(".viewer");
     const v = page.locator("#fig-1 .viewer");
+    assert.equal(await v.getAttribute("data-mode"), "side");
+    assert.deepEqual(await v.locator("figure:visible figcaption").allTextContents(), ["Original", "Ours", "Overlap"]);
+    // three in a row, each name above its picture
+    const boxes = await v.locator("figure").evaluateAll((fs) => fs.map((f) => { const r = f.getBoundingClientRect(), c = f.querySelector("figcaption").getBoundingClientRect(), i = f.querySelector("img").getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), nameAbove: c.bottom <= i.top + 1 }; }));
+    assert.ok(boxes[0].left < boxes[1].left && boxes[1].left < boxes[2].left && boxes[0].top === boxes[2].top, JSON.stringify(boxes));
+    assert.ok(boxes.every((b) => b.nameAbove));
     await v.locator('button[data-m="swipe"]').click();
     await v.locator(".swipe").fill("20");
     assert.equal(await v.locator(".stage").evaluate((el) => el.style.getPropertyValue("--cut")), "20%");
@@ -187,6 +193,8 @@ async function small(browser, base) {
     await v.locator('button[data-m="overlay"]').click();
     assert.equal(await v.locator(".ovl").isVisible(), true);
     assert.equal(await v.locator(".pub").isVisible(), false);
+    await v.locator('button[data-m="side"]').click();
+    assert.equal(await v.locator("figure:visible").count(), 3);
   });
 
   await step("a link pasted anywhere on the first page opens at once", async () => {
