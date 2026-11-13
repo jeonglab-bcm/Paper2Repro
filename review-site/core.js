@@ -404,7 +404,10 @@ function viewerHtml(ctx, render, title) {
   if (render.published) modes.push(["swipe", "Swipe"], ["blink", "Blink"]);
   const buttons = modes.length < 2 ? "" : `<div class="modes" role="group" aria-label="View">${modes.map(([m, label], i) => `<button type="button" data-m="${m}"${i === 0 ? ' aria-pressed="true"' : ""}>${label}</button>`).join("")}</div>`;
   const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between the original and ours">' : "";
-  return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}<div class="stage">${layers}${slider}</div></div>`;
+  // on a card (a phone) one picture shows at a time: its name picks it, a tap on the picture goes to the next
+  const single = [...(render.published ? [["pub", "Original"]] : []), ["ours", "Ours"], ...(render.overlay ? [["overlay", "Overlap"]] : [])];
+  const pick = single.length < 2 ? "" : `<div class="pick" role="group" aria-label="Picture">${single.map(([m, label]) => `<button type="button" data-m="${m}">${label}</button>`).join("")}</div>`;
+  return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}${pick}<div class="stage">${layers}${slider}</div></div>`;
 }
 function stationHtml(ctx, folder, st) {
   const counts = {};
@@ -475,7 +478,7 @@ function boxHtml(unit, details = "") {
       `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>`
     : '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
   return `<div class="dbox" id="d-${unit.key}" data-key="${unit.key}" data-title="${esc(unit.title)}" data-ask="${unit.ask}" data-given="${esc(unit.given)}" data-given-text="${esc(unit.givenText)}" tabindex="-1">` +
-    `${unit.notes || ""}<footer class="decide">${ask}<span class="state" aria-live="polite"></span>${COMMENT}</footer>${details}</div>`;
+    `${unit.notes || ""}<footer class="decide">${ask}<span class="state" aria-live="polite"></span><button type="button" class="dgo">Next</button>${COMMENT}</footer>${details}</div>`;
 }
 export const fileAnchor = (path) => cardKey("file", path).slice(0, 10);
 const delta = (f) => `<span class="delta"><b class="add">+${f.added}</b>${f.deleted ? ` <b class="del">−${f.deleted}</b>` : ""}</span>`;
@@ -566,7 +569,9 @@ function codeHtml(ctx, files, folders, outsideBox) {
     const n = lines(fs);
     if (shown) {
       if (cat !== "shared") fs.sort((a, b) => b.added + b.deleted - (a.added + a.deleted));
-      out.push(`<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines</span></h3>` + fs.map((f, i) => fileHtml(ctx, f, first && i === 0 && cat !== "shared")).join("") + (cat === "shared" ? outsideBox : ""));
+      const head = `<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines</span></h3>`;
+      const list = fs.map((f, i) => fileHtml(ctx, f, first && i === 0 && cat !== "shared")).join("");
+      out.push(cat === "shared" ? `<div class="outside">${head}<div class="ofiles">${list}</div>${outsideBox}</div>` : head + list);
       first = false;
     } else if (cat === "generated") {
       out.push(`<h3 class="ghead">${title} <span class="count">${fs.length} files, ${fmtInt(n)} lines, not shown</span></h3>`);
@@ -672,8 +677,14 @@ export function reviewHtml(review, ctx) {
   const html = `<header class="top"><div class="wrap"><a class="back" href="./">All reviews</a><span class="refline">${esc(review.repo)} · ${bits.join(" · ")} ${chips}</span></div></header>` +
     `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${shared.length ? "" : notes}${code}</section>` +
     '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Agree with the pull request on these</button></div></main>' +
+    '<div class="deckbar"><button type="button" class="dprev" aria-label="Previous card">‹</button><span class="dtitle"></span><span class="dcount"></span>' +
+    '<button type="button" class="dnext" aria-label="Next card">›</button><button type="button" class="linkish dpage">Whole page</button><span class="dprog"><i></i></span></div>' +
+    '<div class="deckend" hidden><div><p class="dhead">That was the last card</p><p class="dsum"></p>' +
+    '<p><button type="button" class="btn dfirst">Go to the first one not decided</button></p>' +
+    '<p><button type="button" class="btn rest">Agree with the pull request on these</button></p>' +
+    `<p><button type="button" class="copy">Copy review</button> <a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></p></div></div>` +
     '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided</span>' +
-    '<button type="button" class="btn next">Next not decided</button><span class="grow"></span>' +
+    '<button type="button" class="btn next">Next not decided</button><button type="button" class="btn dcards">Cards</button><span class="grow"></span>' +
     `<button type="button" class="copy">Copy review</button><a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></div></div>`;
   const lines = Object.fromEntries(Object.entries(by).map(([cat, fs]) => [cat, fs.reduce((n, f) => n + f.added + f.deleted, 0)]));
   const keys = summaries.flatMap((p) => p.keys).concat(outsideKey ? [outsideKey] : []);

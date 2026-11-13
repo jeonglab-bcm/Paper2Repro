@@ -128,7 +128,7 @@ async function small(browser, base) {
     assert.equal(await drawing.locator(".state").textContent(), "Not OK");
     assert.equal(await page.locator(".bar .done").textContent(), "3");
     assert.equal(await page.locator(".bar .all").textContent(), "5");
-    await page.locator(".copy").click();
+    await page.locator(".bar .copy").click();
     await page.waitForTimeout(150);
     const text = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
@@ -144,7 +144,7 @@ async function small(browser, base) {
     await page.locator(".next").click();
     assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Changes outside the paper folder");
     assert.equal(await page.locator(".restnote").textContent(), "2 are not decided yet.");
-    await page.locator(".rest").click();
+    await page.locator(".restbar .rest").click();
     assert.equal(await page.locator("#i-text\\.n + .dbox .state").textContent(), "You agree: Agrees"); // the pull request says Exact
     assert.equal(await page.locator("#code .dbox .state").textContent(), "OK");
     assert.equal(await page.locator(".bar .done").textContent(), "5");
@@ -186,14 +186,14 @@ async function small(browser, base) {
     const boxes = await v.locator("figure").evaluateAll((fs) => fs.map((f) => { const r = f.getBoundingClientRect(), c = f.querySelector("figcaption").getBoundingClientRect(), i = f.querySelector("img").getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), nameAbove: c.bottom <= i.top + 1 }; }));
     assert.ok(boxes[0].left < boxes[1].left && boxes[1].left < boxes[2].left && boxes[0].top === boxes[2].top, JSON.stringify(boxes));
     assert.ok(boxes.every((b) => b.nameAbove));
-    await v.locator('button[data-m="swipe"]').click();
+    await v.locator('.modes button[data-m="swipe"]').click();
     await v.locator(".swipe").fill("20");
     assert.equal(await v.locator(".stage").evaluate((el) => el.style.getPropertyValue("--cut")), "20%");
     assert.equal(await v.locator(".stage").evaluate((el) => el.style.getPropertyValue("--ar")), "8 / 6");
-    await v.locator('button[data-m="overlay"]').click();
+    await v.locator('.modes button[data-m="overlay"]').click();
     assert.equal(await v.locator(".ovl").isVisible(), true);
     assert.equal(await v.locator(".pub").isVisible(), false);
-    await v.locator('button[data-m="side"]').click();
+    await v.locator('.modes button[data-m="side"]').click();
     assert.equal(await v.locator("figure:visible").count(), 3);
   });
 
@@ -243,11 +243,95 @@ async function small(browser, base) {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rv:token"))), "github_pat_test");
   });
 
+  await step("on a phone the review is a deck of cards: one at a time, a verdict brings the next", async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(base + "?r=o/r/pull/7");
+    await page.waitForSelector(".dbox", { state: "attached" });
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("rv:o/r:")) localStorage.removeItem(k); });
+    await page.reload();
+    await page.waitForSelector("body.deck .current");
+    const title = () => page.locator(".deckbar .dtitle").textContent(), count = () => page.locator(".deckbar .dcount").textContent();
+    assert.deepEqual([await title(), await count()], ["Fig. 1", "1 / 5"]);
+    // one card on the screen, and it fits: the picture above, the verdict buttons below
+    assert.equal(await page.locator(".station:visible, .nblock:visible, .outside:visible").count(), 1);
+    assert.equal(await page.locator(".top").isVisible(), false);
+    const fit = await page.evaluate(() => {
+      const card = document.querySelector(".current").getBoundingClientRect(), stage = document.querySelector(".current .stage").getBoundingClientRect();
+      const buttons = [...document.querySelectorAll(".current .decide .opts button")].map((b) => b.getBoundingClientRect());
+      return { cardBottom: Math.round(card.bottom), stageH: Math.round(stage.height), buttonsBelowPicture: buttons.every((b) => b.top >= stage.bottom), buttonsOnScreen: buttons.every((b) => b.bottom <= innerHeight), wide: buttons.every((b) => b.height >= 44) };
+    });
+    assert.deepEqual([fit.cardBottom, fit.buttonsBelowPicture, fit.buttonsOnScreen, fit.wide], [844, true, true, true], JSON.stringify(fit));
+    assert.ok(fit.stageH >= 200, JSON.stringify(fit));
+    // one picture at a time: the overlap first, a tap flips to the next
+    const v = page.locator(".current .viewer");
+    assert.deepEqual(await v.locator(".pick button").allTextContents(), ["Original", "Ours", "Overlap"]);
+    assert.equal(await v.getAttribute("data-mode"), "overlay");
+    assert.equal(await v.locator("figure:visible").count(), 1);
+    await v.locator(".stage").click();
+    assert.equal(await v.getAttribute("data-mode"), "pub");
+    assert.equal(await v.locator(".pick button[aria-pressed=true]").textContent(), "Original");
+    await v.locator('.pick button[data-m="ours"]').click();
+    assert.equal(await v.locator(".ours").isVisible(), true);
+    assert.equal(await v.locator(".pub").isVisible(), false);
+    // a verdict as the pull request says goes straight to the next card
+    await page.locator('.current .decide button[data-v="partly"]').click();
+    await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Fig. 2");
+    assert.equal(await count(), "2 / 5");
+    // a change stays for the comment, and Next goes on
+    await page.locator('.current .decide button[data-v="no"]').click();
+    await page.waitForTimeout(500);
+    assert.equal(await title(), "Fig. 2");
+    await page.locator(".current textarea").fill("Draw it.");
+    await page.locator(".current .dgo").click();
+    assert.deepEqual([await title(), await count()], ["Table 1", "3 / 5"]);
+    assert.equal(await page.locator(".current .matrix").isVisible(), true);
+    // back and forward
+    await page.locator(".dprev").click();
+    assert.equal(await title(), "Fig. 2");
+    assert.equal(await page.locator(".current .state").textContent(), "Not OK");
+    await page.locator(".dnext").click();
+    await page.locator('.current .decide button[data-v="differs"]').click();
+    await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Text");
+    await page.locator(".dnext").click();
+    assert.equal(await title(), "Changes outside the paper folder");
+    assert.equal(await page.locator('.current details.file[data-path="README.md"]').isVisible(), true);
+    await page.locator(".dnext").click();
+    // the last card: what is left, and the review to copy
+    assert.equal(await title(), "Done");
+    assert.equal(await page.locator(".deckend .dsum").textContent(), "3 of 5 decided. 2 are not decided yet.");
+    await page.locator(".deckend .dfirst").click();
+    assert.equal(await title(), "Text");
+    await page.locator(".dnext").click(); await page.locator(".dnext").click();
+    await page.locator(".deckend .rest").click();
+    assert.equal(await page.locator(".deckend .dsum").textContent(), "All 5 decided.");
+    assert.equal(await page.locator(".deckend .dfirst").isVisible(), false);
+    await page.locator(".deckend .copy").click();
+    await page.waitForTimeout(150);
+    assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
+    // the whole page is one tap away, and so are the cards again
+    await page.locator(".dprev").click();
+    await page.locator(".dpage").click();
+    assert.equal(await page.evaluate(() => document.body.classList.contains("deck")), false);
+    assert.equal(await page.locator("#fig-1 .viewer").getAttribute("data-mode"), "side");
+    assert.equal(await page.locator(".station:visible").count(), 2);
+    await page.reload();
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.evaluate(() => document.body.classList.contains("deck")), false); // the choice is kept
+    await page.locator(".bar .dcards").click();
+    assert.equal(await page.evaluate(() => document.body.classList.contains("deck")), true);
+    // a wide screen has no cards
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.waitForFunction(() => !document.body.classList.contains("deck"), null, { timeout: 5000 });
+    assert.equal(await page.locator(".deckbar").isVisible(), false);
+    assert.equal(await page.locator(".station:visible").count(), 2);
+    await page.setViewportSize({ width: 390, height: 844 });
+  });
+
   await step("a phone-wide page does not scroll sideways", async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const q of ["", "?r=o/r/pull/7"]) {
       await page.goto(base + q);
-      await page.waitForSelector(q ? ".dbox" : ".rcard");
+      await page.waitForSelector(q ? ".dbox" : ".rcard", { state: q ? "attached" : "visible" });
       assert.equal(await overflow(page), 0, q || "first page");
     }
   });

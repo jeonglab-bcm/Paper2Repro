@@ -196,13 +196,19 @@ test("a figure shows the original, ours and the overlap at once, each named", ()
   assert.ok(fig1.includes('<figure class="ovl"><figcaption>Overlap</figcaption><img src="https://raw.example/PMC1/figure-reproduction/output/fig1_overlay.png"'));
   const order = ["<figcaption>Original</figcaption>", "<figcaption>Ours</figcaption>", "<figcaption>Overlap</figcaption>"].map((x) => fig1.indexOf(x));
   assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], String(order));
-  assert.deepEqual([...fig1.matchAll(/data-m="(\w+)"[^>]*>([^<]+)</g)].map((m) => m[2]), ["Side by side", "Overlap, large", "Swipe", "Blink"]);
+  const names = (cls) => [...fig1.slice(fig1.indexOf(`<div class="${cls}"`)).split("</div>")[0].matchAll(/data-m="\w+"[^>]*>([^<]+)</g)].map((m) => m[1]);
+  assert.deepEqual(names("modes"), ["Side by side", "Overlap, large", "Swipe", "Blink"]);
+  assert.deepEqual(names("pick"), ["Original", "Ours", "Overlap"]); // for the cards of a phone: one picture at a time
   assert.ok(!html.includes("Published") && !html.includes("Overlay") && !html.includes(".svg"));
   // a reproduction that made no overlap picture: the original and ours, and no view of the overlap
   const r = review();
   r.papers[0].results.items[0].outputs = ["figure-reproduction/output/fig1_ours.png"];
   const two = core.reviewHtml(r, ctx).html;
   assert.ok(two.includes('data-mode="side" data-n="2"') && !two.includes('class="ovl"') && !two.includes("Overlap"));
+  // the page carries what the card view of a phone needs: its bar, a Next in each decision, a last card
+  assert.ok(html.includes('<div class="deckbar">') && html.includes('<div class="deckend" hidden>'));
+  assert.equal((html.match(/<button type="button" class="dgo">Next<\/button>/g) || []).length, 5);
+  assert.ok(html.includes('<div class="outside">') && html.includes('<div class="ofiles">'));
 });
 
 test("only the method and what is shared is shown as code", () => {
