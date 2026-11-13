@@ -201,18 +201,44 @@ async function render() {
   }
 }
 
+const sumKey = (repo, label) => `rv:sum:${repo}:${label}`;
+const sentKey = (repo, label) => `rv:sent:${repo}:${label}`;
+/** Whether the review was copied for the pull request, and whether a decision changed after that. */
+function sentOf(repo, label, keys) {
+  const sent = store.get(sentKey(repo, label));
+  if (!sent) return { state: "no" };
+  const when = new Date(sent.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return { state: sent.sig === core.reviewSig(keys, (k) => said(repo, k)) ? "yes" : "stale", when };
+}
+
 function remember(review, route, summary) {
-  store.set(`rv:sum:${review.repo}:${review.label}`, { sha: review.sha, keys: summary.keys });
+  store.set(sumKey(review.repo, review.label), { sha: review.sha, keys: summary.keys, units: summary.units });
   const label = `${review.repo} ${review.label}` + (summary.papers[0] && summary.papers[0].id ? ` · ${summary.papers[0].id}` : "");
   const recent = (store.get("rv:recent") || []).filter((r) => r.route !== route);
   recent.unshift({ route, label });
   store.set("rv:recent", recent.slice(0, 8));
 }
 
+const homeResults = new Map(); // "owner/repo@sha" → {folder, results} or null: the results.json of a pull request of the first page
+/** Where each open pull request stands for this reviewer: its number → core.standing(), with what is known besides. */
+function standings(repo, pulls) {
+  const out = new Map();
+  for (const p of pulls) {
+    const label = `#${p.number}`, sha = p.head && p.head.sha, sum = store.get(sumKey(repo, label));
+    const st = core.standing(sum, (k) => said(repo, k), sha);
+    if (["changes", "agreed", "reviewed"].includes(st.state)) st.sent = sentOf(repo, label, sum.keys);
+    const hit = homeResults.get(`${repo}@${sha}`);
+    if (st.state === "updated" && hit) st.again = core.paperUnits(hit.folder, hit.results).filter((u) => !said(repo, u.key).v).length;
+    out.set(p.number, st);
+  }
+  return out;
+}
+
 async function home(repo) {
+  const run = (home.run = {}); // a later visit of the first page takes over
   const draw = (pulls, error) => {
     const typed = app.querySelector(".paste input")?.value || "";
-    mount(core.homeHtml({ repo, pulls, recent: store.get("rv:recent") || [], error }));
+    mount(core.homeHtml({ repo, pulls, recent: store.get("rv:recent") || [], error, mine: pulls ? standings(repo, pulls) : undefined }));
     const input = app.querySelector(".paste input");
     input.value = typed;
     if (window.matchMedia("(pointer: fine)").matches) input.focus();
@@ -233,29 +259,42 @@ async function home(repo) {
     }
     return;
   }
-  if (shown !== mine) return;
+  if (shown !== mine || home.run !== run) return;
   draw(pulls, "");
   const [owner, name] = repo.split("/");
-  app.querySelectorAll(".rcard").forEach(async (card) => {
-    const sum = store.get(`rv:sum:${repo}:#${card.dataset.number}`);
-    const progress = card.querySelector(".progress");
-    if (sum && sum.keys.length) {
-      const done = sum.keys.filter((k) => decision(repo, k).v).length;
-      progress.innerHTML = `<b>${done}</b> of <b>${sum.keys.length}</b> decided` + (sum.sha !== card.dataset.sha ? " · changed since you opened it" : "");
-      card.classList.add(done === sum.keys.length ? "alldone" : done ? "started" : "seen");
-    } else {
-      progress.textContent = "Not opened yet";
-    }
-    const id = /PMC\d+/i.exec(card.dataset.title + " " + card.dataset.ref);
-    if (!id || !card.dataset.sha) return;
-    const folder = id[0].toUpperCase(), c = { owner, repo: name, sha: card.dataset.sha };
+  // what the pull request itself says: its verdicts, the paper's name
+  const fill = (card) => {
+    const hit = homeResults.get(`${repo}@${card.dataset.sha}`);
+    if (!hit) return;
+    const counts = Object.fromEntries(core.VERDICTS.map((v) => [v, hit.results.items.filter((it) => it && it.verdict === v).length]));
+    card.querySelector(".rbar").innerHTML = core.verdictBar(counts);
+    card.querySelector(".pmc").textContent = hit.folder;
+    if (hit.results.paper && hit.results.paper.title) card.querySelector("h2").textContent = hit.results.paper.title;
+  };
+  const redraw = () => {
+    const slot = app.querySelector(".pulls");
+    slot.innerHTML = core.pullsHtml(repo, pulls, standings(repo, pulls));
+    slot.querySelectorAll(".rcard").forEach(fill);
+  };
+  app.querySelectorAll(".rcard").forEach(fill);
+  pulls.forEach(async (p) => {
+    const sha = p.head && p.head.sha, at = `${repo}@${sha}`;
+    const id = /PMC\d+/i.exec(`${p.title} ${p.head && p.head.ref}`);
+    if (!id || !sha || homeResults.has(at)) return;
+    const folder = id[0].toUpperCase(), c = { owner, repo: name, sha };
     const text = (await rawText(c, `${folder}/results.json`)) || (await rawText(c, `${folder}/figure-reproduction/results.json`));
     const results = text && core.parseResults(text);
-    if (!results || !card.isConnected) return;
-    const counts = Object.fromEntries(core.VERDICTS.map((v) => [v, results.items.filter((it) => it && it.verdict === v).length]));
-    card.querySelector(".rbar").innerHTML = core.verdictBar(counts);
-    card.querySelector(".pmc").textContent = folder;
-    if (results.paper && results.paper.title) card.querySelector("h2").textContent = results.paper.title;
+    homeResults.set(at, results ? { folder, results } : null);
+    if (!results || home.run !== run || !app.querySelector(".pulls")) return;
+    // a review kept by an older version of the page did not keep what the pull request says of each decision: the results tell
+    const key = sumKey(repo, `#${p.number}`), sum = store.get(key);
+    const old = sum && !sum.units && Array.isArray(sum.keys) && sum.sha === sha;
+    if (old) {
+      const by = new Map(core.paperUnits(folder, results).map((u) => [u.key, u]));
+      store.set(key, { ...sum, units: sum.keys.map((k) => by.get(k) || { key: k }) });
+    }
+    if (old || (sum && sum.sha !== sha)) redraw();
+    else fill(app.querySelector(`.rcard[data-number="${p.number}"]`));
   });
 }
 
@@ -269,9 +308,9 @@ const decision = (repo, k) => store.get(dkey(repo, k)) || {};
  * (as the pull request says), or "ok" / "no". Decisions saved by older versions keep their note only.
  */
 const said = (repo, k) => { const s = decision(repo, k); return { v: ["agrees", "partly", "differs", "pr", "ok", "no"].includes(s.v) ? s.v : "", note: s.note || "" }; };
-const LABEL = { ...core.VERDICT_LABEL, ok: "OK", no: "Not OK", pr: "as the pull request says" };
+const LABEL = core.SAID_LABEL;
 /** Whether what the reviewer said is what the pull request says. */
-const agreesWithPr = (box, v) => v === "pr" || v === "ok" || (!!v && v === box.dataset.given);
+const agreesWithPr = (box, v) => core.standOf({ given: box.dataset.given }, v) === "same";
 
 function wireReview(review, c, summary) {
   const repo = review.repo;
@@ -282,6 +321,8 @@ function wireReview(review, c, summary) {
     const s = said(repo, box.dataset.key);
     box.dataset.v = s.v;
     box.dataset.same = String(agreesWithPr(box, s.v));
+    const block = box.closest(".station, .nblock, .outside");
+    if (block) block.dataset.mine = !s.v ? "" : agreesWithPr(box, s.v) ? "same" : "change";
     box.querySelectorAll(".decide .opts button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === s.v)));
     const ta = box.querySelector("textarea");
     if (document.activeElement !== ta) { ta.value = s.note; if (ta.value) grow(ta); }
@@ -289,8 +330,25 @@ function wireReview(review, c, summary) {
       : agreesWithPr(box, s.v) ? `You agree: ${LABEL[s.v]}` : `You say: ${LABEL[s.v]}`;
   };
   const rest = app.querySelector(".restbar");
+  // the decisions at a glance, apart by how they stand; a name goes to its figure or table
+  const maps = [...app.querySelectorAll(".rmap")];
+  const paintMap = () => {
+    const sent = sentOf(repo, review.label, summary.keys);
+    const foot = sent.state === "yes" ? `Review copied ${sent.when}. Nothing changed since.` : sent.state === "stale" ? `Your decisions changed since you copied the review (${sent.when}).` : "";
+    const html = core.mapHtml(summary.units, (k) => said(repo, k), foot);
+    maps.forEach((m) => { m.innerHTML = html; });
+  };
+  maps.forEach((m) => m.addEventListener("click", (ev) => {
+    const chip = ev.target.closest("[data-key]"), box = chip && boxes.find((x) => x.dataset.key === chip.dataset.key);
+    if (!box) return;
+    if (deck.on) deck.show(deck.cards.findIndex((x) => x.contains(box)));
+    else goTo(box);
+  }));
   const progress = () => {
     const left = open().length;
+    const change = boxes.filter((x) => { const v = said(repo, x.dataset.key).v; return v && !agreesWithPr(x, v); }).length;
+    app.querySelector(".bar .chg").textContent = change ? ` · ${change} to change` : "";
+    paintMap();
     app.querySelector(".bar .done").textContent = boxes.length - left;
     app.querySelector(".bar .all").textContent = boxes.length;
     app.querySelector(".next").hidden = !left;
@@ -313,6 +371,7 @@ function wireReview(review, c, summary) {
       s.note = ta.value;
       store.set(dkey(repo, box.dataset.key), s);
       grow(ta);
+      paintMap();
     });
   });
   // the box the reviewer was in last: "next" goes on from there, also after a click on the button itself
@@ -429,6 +488,9 @@ function wireReview(review, c, summary) {
   };
   app.querySelectorAll(".copy").forEach((copy) => copy.addEventListener("click", () => {
     const text = reviewText();
+    // kept, so the first page can say whether this review went out and whether it changed after
+    store.set(sentKey(repo, review.label), { sig: core.reviewSig(summary.keys, (k) => said(repo, k)), sha: review.sha, at: new Date().toISOString() });
+    paintMap();
     const done = () => {
       copy.textContent = "Copied";
       copy.classList.add("flash");
