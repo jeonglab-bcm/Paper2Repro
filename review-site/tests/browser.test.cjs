@@ -70,9 +70,9 @@ async function small(browser, base) {
   await step("a pasted pull request link opens its review", async () => {
     await page.locator(".paste input").fill("https://github.com/o/r/pull/7/files");
     await page.locator(".paste button").click();
-    await page.waitForSelector(".card");
+    await page.waitForSelector(".dbox");
     assert.equal(new URL(page.url()).search, "?r=o/r/pull/7");
-    assert.equal(await page.locator(".card").count(), 5);
+    assert.equal(await page.locator(".dbox").count(), 5);
     assert.equal(await page.locator("h1").textContent(), "A paper <script>alert(1)</script>");
     assert.equal(await page.locator("script").count(), 1); // app.js only
     assert.equal(await page.locator(".refline .chip.ci-passed").count(), 1);
@@ -90,57 +90,88 @@ async function small(browser, base) {
     assert.equal(await page.locator('details.file[data-path$="check_results.py"]').count(), 0);
   });
 
-  await step("a verdict of your own and a comment are kept, counted and shown on the figure", async () => {
-    const cards = page.locator(".card");
-    const cause = cards.nth(0);
-    assert.match(await cause.locator(".ask").textContent(), /The pull request says Differs\. Your verdict:/);
-    await cause.locator('button[data-v="agrees"]').click();
-    assert.equal(await cause.locator(".state").textContent(), "You say: Agrees");
-    assert.equal(await cause.locator(".lead").isVisible(), true); // nothing folds away
-    await cause.locator("textarea").fill("The curve agrees within noise.");
-    assert.equal(await page.locator("#i-table1 .mine").textContent(), "You say: Agrees");
-    assert.equal(await page.locator("#i-fig1\\.curve .mine").textContent(), "You say: Agrees");
-    await cards.nth(1).locator('button[data-v="no"]').click();
-    await cards.nth(1).locator("textarea").fill("Say which release.");
-    await cards.nth(2).locator('button[data-v="ok"]').click();
-    assert.equal(await cards.nth(2).locator(".state").textContent(), "OK");
+  await step("each figure and table has its decision below it, and there is no section of decisions", async () => {
+    assert.equal(await page.locator(".dbox").count(), 5);
+    assert.equal(await page.locator("#fig-1 .dbox").count(), 1);
+    assert.equal(await page.locator("#fig-2 .dbox").count(), 1);
+    assert.equal(await page.locator("#i-table1 + .dbox").count(), 1);
+    assert.equal(await page.locator("#code .dbox").count(), 1);
+    assert.deepEqual(await page.locator("h2").allTextContents(), ["Figures", "Tables and numbers", "Code"]);
+    assert.deepEqual(await page.locator(".tabs a").evaluateAll((as) => as.map((a) => a.childNodes[0].textContent.trim())), ["Figures", "Tables and numbers", "Code"]);
+    // a figure block is the pictures, then the question; what was measured and why stays closed
+    const gap = await page.evaluate(() => {
+      const st = document.querySelector("#fig-1"), box = st.querySelector(".dbox");
+      return Math.round(box.getBoundingClientRect().top - st.querySelector(".views").getBoundingClientRect().bottom);
+    });
+    assert.ok(gap >= 0 && gap < 40, `gap ${gap}`);
+    assert.equal(await page.locator("#fig-1 .irow").isVisible(), false);
+    assert.equal(await page.locator("svg").count(), 0);
+    await page.locator("#fig-1 details.info > summary").click();
+    assert.equal(await page.locator("#fig-1 .irow").isVisible(), true);
+    assert.match(await page.locator("#fig-1 details.info").textContent(), /Our curve is lower\./);
+    await page.locator("#fig-1 details.info > summary").click();
+    // a table shows its numbers, then the question
+    assert.equal(await page.locator("#i-table1 .matrix").isVisible(), true);
+  });
+
+  await step("a verdict of your own and a comment are kept and counted", async () => {
+    const fig = page.locator("#fig-1 .dbox"), table = page.locator("#i-table1 + .dbox"), drawing = page.locator("#fig-2 .dbox");
+    assert.match(await fig.locator(".ask").textContent(), /The pull request says Partly\. Your verdict:/);
+    await fig.locator('button[data-v="agrees"]').click();
+    assert.equal(await fig.locator(".state").textContent(), "You say: Agrees");
+    await fig.locator("textarea").fill("The curve agrees within noise.");
+    await table.locator('button[data-v="differs"]').click(); // the same as the pull request
+    assert.equal(await table.locator(".state").textContent(), "You agree: Differs");
+    assert.equal(await drawing.locator(".ask").textContent(), "Is this OK?");
+    await drawing.locator('button[data-v="no"]').click();
+    await drawing.locator("textarea").fill("Draw it.");
+    assert.equal(await drawing.locator(".state").textContent(), "Not OK");
     assert.equal(await page.locator(".bar .done").textContent(), "3");
-    await page.locator("#i-table1 .why").click(); // an anchor: the page stays as it is
-    assert.equal(new URL(page.url()).search, "?r=o/r/pull/7");
-    assert.equal(await cause.locator("textarea").inputValue(), "The curve agrees within noise.");
+    assert.equal(await page.locator(".bar .all").textContent(), "5");
     await page.locator(".copy").click();
     await page.waitForTimeout(150);
     const text = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
-    assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1 · Table 1\*\*: Differs → Agrees\. The curve agrees within noise\./);
-    assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Choices the paper does not give\*\*: Say which release\./);
-    assert.match(text, /\*\*Agreed \(1\):\*\* Values the paper prints/);
-    assert.match(text, /\*\*Not decided \(2\)\*\*/);
-    await cause.locator('button[data-v="differs"]').click(); // the same as the pull request
-    assert.equal(await cause.locator(".state").textContent(), "You agree: Differs");
-    assert.equal(await page.locator("#i-table1 .mine").count(), 0);
-    await cause.locator('button[data-v="agrees"]').click();
+    assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1\*\*: Partly → Agrees\. The curve agrees within noise\./);
+    assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
+    assert.match(text, /\*\*Agreed \(1\):\*\* Table 1 \(Differs\)/);
+    assert.match(text, /\*\*Not decided \(2\)\*\*\n- \*\*Text\*\*\n- \*\*Changes outside the paper folder\*\*/);
+  });
+
+  await step("the next one not decided is one click away, and the rest can follow the pull request", async () => {
+    await page.locator(".next").click();
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Text");
+    await page.locator(".next").click();
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Changes outside the paper folder");
+    assert.equal(await page.locator(".restnote").textContent(), "2 are not decided yet.");
+    await page.locator(".rest").click();
+    assert.equal(await page.locator("#i-text\\.n + .dbox .state").textContent(), "You agree: Agrees"); // the pull request says Exact
+    assert.equal(await page.locator("#code .dbox .state").textContent(), "OK");
+    assert.equal(await page.locator(".bar .done").textContent(), "5");
+    assert.equal(await page.locator(".restbar").isVisible(), false);
+    assert.equal(await page.locator(".next").isVisible(), false);
     await page.reload();
-    await page.waitForSelector(".card");
-    assert.equal(await page.locator(".bar .done").textContent(), "3");
-    assert.equal(await page.locator(".card").nth(0).locator(".state").textContent(), "You say: Agrees");
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator(".bar .done").textContent(), "5");
+    assert.equal(await page.locator("#fig-1 .dbox .state").textContent(), "You say: Agrees");
+    assert.equal(await page.locator("#fig-1 .dbox textarea").inputValue(), "The curve agrees within noise.");
     await page.locator(".back").click();
     await page.waitForSelector(".rcard .progress b");
-    assert.equal(await page.locator(".rcard .progress").textContent(), "3 of 5 decided");
+    assert.equal(await page.locator(".rcard .progress").textContent(), "5 of 5 decided");
     assert.match(await page.locator(".recent").textContent(), /o\/r #7 · PMC1/);
   });
 
-  await step("a decision saved as Accept or Needs work keeps its comment and asks again", async () => {
+  await step("a decision saved by an older version keeps its comment and asks again", async () => {
     await page.evaluate(() => {
       const key = Object.keys(localStorage).find((k) => k.startsWith("rv:o/r:") && JSON.parse(localStorage[k]).v === "ok");
       localStorage.setItem(key, JSON.stringify({ d: "ok", note: "an old note" }));
     });
     await page.locator(".rcard").click();
-    await page.waitForSelector(".card");
-    const old = page.locator(".card").nth(2);
+    await page.waitForSelector(".dbox");
+    const old = page.locator("#code .dbox");
     assert.equal(await old.locator(".state").textContent(), "");
     assert.equal(await old.locator("textarea").inputValue(), "an old note");
-    assert.equal(await page.locator(".bar .done").textContent(), "2");
+    assert.equal(await page.locator(".bar .done").textContent(), "4");
     await page.locator(".back").click();
     await page.waitForSelector(".rcard");
   });
@@ -166,7 +197,7 @@ async function small(browser, base) {
       data.setData("text", "https://github.com/o/r/tree/side");
       document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
     });
-    await page.waitForSelector(".card");
+    await page.waitForSelector(".dbox");
     assert.equal(new URL(page.url()).search, "?r=o/r/tree/side");
     assert.match(await page.locator(".note").first().textContent(), /No Paper2Repro results.json/);
     assert.equal(await page.locator('details.file[data-path="tools.py"]').count(), 1);
@@ -174,13 +205,13 @@ async function small(browser, base) {
 
   await step("a branch that has a pull request opens as that pull request", async () => {
     await page.goto(base + "?url=" + encodeURIComponent("https://github.com/o/r/tree/paper"));
-    await page.waitForSelector(".card");
+    await page.waitForSelector(".dbox");
     assert.equal(new URL(page.url()).search, "?r=o/r/pull/7");
   });
 
   await step("a tree link that ends in a path still finds its branch", async () => {
     await page.goto(base + "?url=" + encodeURIComponent("https://github.com/o/r/tree/side/PMC1"));
-    await page.waitForSelector(".card");
+    await page.waitForSelector(".dbox");
     assert.equal(new URL(page.url()).search, "?r=o/r/tree/side");
   });
 
@@ -200,7 +231,7 @@ async function small(browser, base) {
     await page.locator(".token").click();
     await page.locator("dialog .tok").fill("github_pat_test");
     await page.locator("dialog .save").click();
-    await page.waitForSelector(".card");
+    await page.waitForSelector(".dbox");
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rv:token"))), "github_pat_test");
   });
 
@@ -208,7 +239,7 @@ async function small(browser, base) {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const q of ["", "?r=o/r/pull/7"]) {
       await page.goto(base + q);
-      await page.waitForSelector(q ? ".card" : ".rcard");
+      await page.waitForSelector(q ? ".dbox" : ".rcard");
       assert.equal(await overflow(page), 0, q || "first page");
     }
   });
@@ -231,7 +262,7 @@ async function real(browser, base) {
     const before = mock.state.calls, t0 = Date.now();
     await page.setViewportSize({ width: 1280, height: 1000 });
     await page.goto(`${base}?url=${encodeURIComponent(`https://github.com/${owner}/${repo}/pull/${p.number}`)}`);
-    await page.waitForSelector(".card", { timeout: 120000 });
+    await page.waitForSelector(".dbox", { timeout: 120000 });
     await page.locator("details.file[open] pre.code .l").first().waitFor({ timeout: 30000 }).catch(() => {});
     const pics = await picturesLoaded(page);
     const wide = await overflow(page);
@@ -239,7 +270,8 @@ async function real(browser, base) {
     await page.setViewportSize({ width: 390, height: 844 });
     const narrow = await overflow(page);
     const facts = {
-      pr: p.number, cards: await page.locator(".card").count(), figures: await page.locator(".station").count(),
+      pr: p.number, decisions: await page.locator(".dbox").count(), figures: await page.locator(".station").count(),
+      inFigures: await page.locator(".station .dbox").count(), inTables: await page.locator(".nblock .dbox").count(),
       pictures: `${pics.ok}/${pics.all}`, files: await page.locator("details.file").count(),
       apiCalls: mock.state.calls - before, seconds: ((Date.now() - t0) / 1000).toFixed(1), overflow: [wide, narrow],
     };

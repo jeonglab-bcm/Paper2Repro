@@ -322,3 +322,32 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .decide button[data-v="no"][aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .decide textarea { flex-basis: 100%; }
 .chip.mine { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* the decision right below its figure or table */
+.dbox { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--v-incon); border-radius: 8px; background: var(--bg); outline: none; scroll-margin-top: 70px; }
+.dbox:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.dbox[data-same="true"] { border-left-color: var(--ours); }
+.dbox[data-same="false"]:not([data-v=""]) { border-left-color: var(--accent); }
+.dbox[data-same="true"] .state { color: var(--ours); }
+.dbox[data-same="false"] .state { color: var(--accent); }
+.dbox .state { margin-left: 2px; font-size: 13px; font-weight: 600; }
+.dbox .decide { margin-top: 0; }
+.dbox .decide textarea { background: var(--surface); }
+.dbox > .cause, .dbox > details, .dbox > .warn { margin-bottom: 8px; }
+.cause .lead { margin-top: 0; font-size: 14px; }
+.cause .lead .chip { margin-left: 4px; vertical-align: 1px; }
+.cause details { display: inline-block; margin-right: 14px; vertical-align: top; }
+.cause details[open] { display: block; }
+.nblock { padding-bottom: 14px; }
+.station .dbox { margin-top: 12px; }
+.restbar { margin: 26px 0 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; font-size: 14px; }
+[hidden] { display: none !important; }
+@media (max-width: 520px) { .bar .progress { font-size: 13px; } .bar .wrap { gap: 6px; } }
+
+/* figure, then the question; the rest is one closed "Details" */
+.station > .views { margin-bottom: 4px; }
+.dbox > details.info { margin: 10px 0 0; }
+.dbox > details.info > summary { font-size: 13px; }
+.dbox > details.info[open] > summary { margin-bottom: 8px; }
+.dbox > details.info .rows { margin-bottom: 10px; }
+.dbox > details.info > .cause, .dbox > details.info > details { margin-bottom: 8px; }

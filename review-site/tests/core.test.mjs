@@ -46,16 +46,15 @@ test("results.json with NaN, as Python writes it, is read", () => {
   assert.equal(core.parseResults('{"no": "items"}'), null);
 });
 
-test("fields are laid out as the paper's table, a series, or a list", () => {
+test("fields are laid out as the paper's table, or as a list", () => {
   const [kind, { rows, cols, cells }] = core.shapeFields(core.fieldsOf(RESULTS.items[1]));
   assert.deepEqual([kind, rows, cols], ["matrix", ["A", "B"], ["ACC", "SN"]]);
   assert.ok(cells.get("A\x1fACC").error);
   assert.equal(cells.get("A\x1fSN").match, true);
   assert.equal(core.measureOf(RESULTS.items[1]), "2 of 3 as printed, 1 paper error");
-  const series = Array.from({ length: 6 }, (_, i) => ({ name: `ACC at LG ${i + 1}`, a: 0.7 + i / 100, b: 0.71, match: false, error: null }));
-  const [k2, data] = core.shapeFields(series);
-  assert.equal(k2, "series");
-  assert.equal(data.get("ACC at LG").length, 6);
+  // values along an axis are a list too: the page draws no charts of its own
+  const along = Array.from({ length: 6 }, (_, i) => ({ name: `ACC at LG ${i + 1}`, a: 0.7 + i / 100, b: 0.71, match: false, error: null }));
+  assert.equal(core.shapeFields(along)[0], "list");
   assert.equal(core.shapeFields([{ name: "one", a: 1, b: 1 }])[0], "list");
 });
 
@@ -86,24 +85,22 @@ test("the first sentence keeps abbreviations whole", () => {
   assert.equal(core.firstSentence("See Fig. 3 for it. More.")[0], "See Fig. 3 for it.");
 });
 
-test("items that share their hypotheses share a card; every cause has its own card", () => {
-  const cards = core.causeCards("PMC1", RESULTS.items);
-  assert.equal(cards.length, 1);
-  assert.equal(cards[0].title, "Fig. 1 · Table 1");
-  assert.equal(cards[0].verdict, "differs");
-  assert.equal(cards[0].status, "open");
-  assert.deepEqual(core.decisionCards("PMC1", RESULTS.items, [], []).map((c) => c.kind), ["cause", "choices", "errors", "skipped"]);
-  // a difference with a tested cause is a card too, after the open ones
-  const more = structuredClone(RESULTS.items);
-  more.unshift({ id: "fig3", label: "Fig. 3", kind: "figure", method: "values", verdict: "partly", cause: { category: "nondeterminism", status: "explained", summary: "Seeds." } });
-  assert.deepEqual(core.causeCards("PMC1", more).map((c) => [c.title, c.status]), [["Fig. 1 · Table 1", "open"], ["Fig. 3", "explained"]]);
-  // two causes in one figure are told apart by the part they are about
-  more.unshift({ id: "fig3.b", label: "Fig. 3b, panel b", kind: "figure", method: "values", verdict: "differs", cause: { category: "unknown", status: "open", summary: "Other." } });
-  assert.deepEqual(core.causeCards("PMC1", more).map((c) => c.title), ["Fig. 1 · Table 1", "Fig. 3: panel b", "Fig. 3: fig3"]);
-  const texts = [1, 2].map((n) => ({ id: `text.t${n}`, label: `GO counts ${n}`, kind: "value", method: "values", verdict: "differs", cause: { category: "unknown", status: "open", summary: `S${n}.` } }));
-  assert.deepEqual(core.causeCards("PMC1", texts).map((c) => c.title), ["Text: GO counts 1", "Text: GO counts 2"]);
-  assert.equal(core.cardKey("a", "b"), core.cardKey("a", "b"));
-  assert.notEqual(core.cardKey("a", "b"), core.cardKey("a", "c"));
+test("a figure or a table asks for one decision, by what the pull request says about it", () => {
+  const [curve, table, exact, drawing] = RESULTS.items;
+  const one = core.unitOf("PMC1", "table1", "Table 1", [table]);
+  assert.deepEqual([one.ask, one.given, one.givenText, one.title], ["verdict", "differs", "Differs", "Table 1"]);
+  // exact is as good as agrees: the reviewer's Agrees is no change
+  assert.deepEqual([core.unitOf("PMC1", "t", "Text", [exact]).given, core.unitOf("PMC1", "t", "Text", [exact]).givenText], ["agrees", "Exact"]);
+  // a figure with curves of several verdicts gets one decision
+  const mixed = core.unitOf("PMC1", "fig-1", "Fig. 1", [curve, { ...curve, id: "fig1.b", verdict: "differs" }, { ...curve, id: "fig1.c", verdict: "differs" }, drawing]);
+  assert.deepEqual([mixed.ask, mixed.given, mixed.givenText], ["verdict", "mixed", "1 partly, 2 differs, 1 not attempted"]);
+  // nothing to judge: a figure that was not attempted, a check
+  assert.deepEqual([core.unitOf("PMC1", "fig-2", "Fig. 2", [drawing]).ask, core.unitOf("PMC1", "fig-2", "Fig. 2", [drawing]).given], ["ok", ""]);
+  assert.equal(core.unitOf("PMC1", "package", "Package", [{ id: "package", kind: "code_check", method: "check", verdict: "agrees" }]).ask, "ok");
+  // a decision is kept until what it is about changes
+  assert.equal(one.key, core.unitOf("PMC1", "table1", "Table 1", [structuredClone(table)]).key);
+  assert.notEqual(one.key, core.unitOf("PMC1", "table1", "Table 1", [{ ...table, verdict: "partly" }]).key);
+  assert.notEqual(one.key, core.unitOf("PMC1", "table1", "Table 1", [{ ...table, cause: { ...table.cause, summary: "Another reason." } }]).key);
 });
 
 test("highlighted code is cut into lines that each close their spans", () => {
@@ -148,24 +145,46 @@ test("the page is laid out by the paper, and text from the repository is escaped
   assert.ok(!html.includes("<script>alert(1)</script>"));
   assert.ok(html.includes("A paper &lt;script&gt;alert(1)&lt;/script&gt;"));
   assert.ok(html.includes("some&lt;one&gt;"));
-  assert.ok(html.includes('id="fig-1"'));
-  assert.ok(html.includes("Fig. 1 · Table 1"));
-  assert.ok(html.includes("2 of 2 tested causes ruled out"));
   assert.ok(html.includes('<th scope="row">A</th>'));
   assert.ok(html.includes("paper error"));
-  assert.ok(html.includes("Conflicts with main"));
-  assert.equal((html.match(/<article class="card/g) || []).length, 5); // cause, choices, errors, outside, not attempted
-  assert.equal(summary.papers[0].cards.length, 5);
-  // a cause asks for the reviewer's own verdict, the other cards ask whether they are OK
-  assert.match(html, /data-verdict="differs" data-members="\[&quot;fig1.curve&quot;,&quot;table1&quot;\]"/);
-  assert.ok(html.includes("The pull request says <b>Differs</b>. Your verdict:"));
-  assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 1);
-  assert.equal((html.match(/Is this OK\?/g) || []).length, 4);
-  assert.ok(!html.includes("Needs work") && !html.includes("Accept"));
-  // the evidence comes first: figures, then tables and numbers, then the decisions, then the code
-  const at = ['id="figures-0"', 'id="numbers-0"', 'id="decisions-0"', 'id="code"'].map((x) => html.indexOf(x));
+  // figures, then tables and numbers, then the code; no section of decisions
+  const at = ['id="figures-0"', 'id="numbers-0"', 'id="code"'].map((x) => html.indexOf(x));
   assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));
+  assert.ok(!html.includes("Decisions") && !html.includes('id="decisions') && !html.includes('class="card'));
   assert.deepEqual(summary.papers[0].counts, { exact: 1, agrees: 0, partly: 1, inconclusive: 0, differs: 1, not_attempted: 1 });
+});
+
+test("each figure and each table has its decision right below it", () => {
+  const { html, summary } = core.reviewHtml(review(), ctx);
+  assert.equal((html.match(/<div class="dbox"/g) || []).length, 5); // Fig. 1, Fig. 2, Table 1, the number in the text, the files outside
+  assert.equal(summary.keys.length, 5);
+  const part = (from, to) => html.slice(html.indexOf(from), html.indexOf(to));
+  // Fig. 1: the pictures, then the question; what was measured and why is closed, after the question
+  const fig1 = part('id="fig-1"', 'id="fig-2"');
+  assert.equal((fig1.match(/<div class="dbox"/g) || []).length, 1);
+  assert.ok(fig1.includes('data-title="Fig. 1" data-ask="verdict" data-given="partly" data-given-text="Partly"'));
+  assert.ok(fig1.includes("The pull request says <b>Partly</b>. Your verdict:"));
+  const order = ['class="viewer"', 'class="dbox"', 'class="decide"', '<details class="info">', 'class="irow"', "Our curve is lower.", "2 of 2 tested causes ruled out"].map((x) => fig1.indexOf(x));
+  assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
+  assert.ok(!html.includes("<svg") && !html.includes('class="chart"')); // no charts drawn by the page
+  // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
+  const fig2 = part('id="fig-2"', 'id="numbers-0"');
+  assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict"));
+  assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
+  // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
+  const table = part('id="i-table1"', 'id="i-text.n"');
+  assert.ok(table.includes("The pull request says <b>Differs</b>. Your verdict:"));
+  assert.ok(table.indexOf('class="matrix"') < table.indexOf('class="decide"') && table.indexOf('class="decide"') < table.indexOf("<summary>Details: why</summary>"));
+  assert.ok(table.includes("Within 2 points."));
+  assert.ok(table.includes("1 choice the paper does not give") && table.includes("UniRef100 for nr"));
+  assert.ok(table.includes("1 value the paper prints that does not follow from its own numbers") && table.includes("79.91, not 79.96"));
+  assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 3);
+  // what changed outside the paper folder is decided where its diff is
+  const code = html.slice(html.indexOf('id="code"'));
+  assert.ok(code.includes('data-title="Changes outside the paper folder" data-ask="ok"'));
+  assert.ok(code.includes("Conflicts with main"));
+  assert.ok(code.indexOf('data-path="README.md"') < code.indexOf('class="dbox"'));
+  assert.ok(!html.includes("Needs work") && !html.includes("Accept"));
 });
 
 test("pictures come from the commit, published next to ours", () => {
@@ -191,7 +210,8 @@ test("a change without a paper still gets a page", () => {
   r.papers = [];
   const { html } = core.reviewHtml(r, ctx);
   assert.ok(html.includes("No Paper2Repro results.json"));
-  assert.equal((html.match(/<article class="card/g) || []).length, 1);
+  assert.equal((html.match(/<div class="dbox"/g) || []).length, 1);
+  assert.ok(html.includes('data-title="Changed files" data-ask="ok"'));
 });
 
 test("the first page lists what is open, each with its address", () => {
