@@ -351,3 +351,20 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .dbox > details.info[open] > summary { margin-bottom: 8px; }
 .dbox > details.info .rows { margin-bottom: 10px; }
 .dbox > details.info > .cause, .dbox > details.info > details { margin-bottom: 8px; }
+
+/* a figure: the original, ours and the overlap at once, each named above it */
+.viewer { max-width: 920px; }
+.viewer[data-n="3"] { max-width: none; }
+.viewer[data-n="1"] { max-width: 560px; }
+.viewer[data-mode="side"] .stage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; background: none; }
+.viewer[data-mode="side"][data-n="3"] .stage { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.viewer[data-mode="side"][data-n="1"] .stage { grid-template-columns: minmax(0, 1fr); }
+.viewer[data-mode="side"] .stage figure { border: 1px solid var(--line); border-radius: 8px; }
+.viewer[data-mode="side"] .ovl { display: block; }
+.viewer[data-mode="side"] .stage figcaption { text-align: left; font-size: 13px; font-weight: 700; padding: 6px 10px; color: #1d1c1a; border-bottom: 1px solid #e3e0d8; }
+.viewer[data-mode="side"] .stage .ours figcaption { color: #17805a; }
+.viewer[data-mode="side"] .stage .ovl figcaption { color: #4b47c9; }
+.stage.solo figcaption { position: static; display: block; background: none; color: #1d1c1a; font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 0; border-bottom: 1px solid #e3e0d8; }
+@media (max-width: 700px) {
+  .viewer[data-mode="side"] .stage, .viewer[data-mode="side"][data-n="3"] .stage { grid-template-columns: minmax(0, 1fr); }
+}

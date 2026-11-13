@@ -387,23 +387,31 @@ function itemRow(item) {
     `${scoreBar(p)}<span class="meas">${p ? "" : esc(measureOf(item))}</span></div>${detail}${body}</div>`;
 }
 const imgTag = (ctx, path, alt) => `<img src="${esc(ctx.img(path))}" data-path="${esc(path)}" alt="${esc(alt)}" loading="lazy">`;
+/**
+ * The pictures of one figure. All of them show at once, each named above it: the original (the
+ * published figure), ours, and the overlap (both drawn on top of each other), so nothing to
+ * compare is behind a button. The other views are for a closer look.
+ */
 function viewerHtml(ctx, render, title) {
-  const modes = render.published ? [["side", "Side by side"], ["swipe", "Swipe"], ["blink", "Blink"]] : [["ours", "Ours"]];
-  if (render.overlay) modes.push(["overlay", "Overlay"]);
-  const buttons = modes.map(([m, label], i) => `<button type="button" data-m="${m}"${i === 0 ? ' aria-pressed="true"' : ""}>${label}</button>`).join("");
+  const fig = (cls, path, name, alt) => `<figure class="${cls}"><figcaption>${name}</figcaption>${imgTag(ctx, path, `${title}, ${alt}`)}</figure>`;
   let layers = "";
-  if (render.published) layers += `<figure class="pub">${imgTag(ctx, render.published, title + ", published")}<figcaption>Published</figcaption></figure>`;
-  layers += `<figure class="ours">${imgTag(ctx, render.ours, title + ", ours")}<figcaption>Ours</figcaption></figure>`;
-  if (render.overlay) layers += `<figure class="ovl">${imgTag(ctx, render.overlay, title + ", overlay")}<figcaption>Overlay</figcaption></figure>`;
-  const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between published and ours">' : "";
-  return `<div class="viewer" data-mode="${modes[0][0]}"><div class="modes" role="group" aria-label="View">${buttons}</div><div class="stage">${layers}${slider}</div></div>`;
+  if (render.published) layers += fig("pub", render.published, "Original", "original");
+  layers += fig("ours", render.ours, "Ours", "ours");
+  if (render.overlay) layers += fig("ovl", render.overlay, "Overlap", "original and ours on top of each other");
+  const n = (render.published ? 1 : 0) + 1 + (render.overlay ? 1 : 0);
+  const modes = [["side", "Side by side"]];
+  if (render.overlay) modes.push(["overlay", "Overlap, large"]);
+  if (render.published) modes.push(["swipe", "Swipe"], ["blink", "Blink"]);
+  const buttons = modes.length < 2 ? "" : `<div class="modes" role="group" aria-label="View">${modes.map(([m, label], i) => `<button type="button" data-m="${m}"${i === 0 ? ' aria-pressed="true"' : ""}>${label}</button>`).join("")}</div>`;
+  const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between the original and ours">' : "";
+  return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}<div class="stage">${layers}${slider}</div></div>`;
 }
 function stationHtml(ctx, folder, st) {
   const counts = {};
   for (const it of st.items) counts[it.verdict] = (counts[it.verdict] || 0) + 1;
   const dots = VERDICTS.filter((v) => counts[v]).map((v) => `<i class="dot v-${v}" title="${counts[v]} ${VERDICT_LABEL[v].toLowerCase()}"></i>`.repeat(counts[v])).join("");
   let views = st.renders.map((r) => (st.renders.length > 1 ? `<p class="rlabel">${esc(r.label)}</p>` : "") + viewerHtml(ctx, r, st.title)).join("");
-  if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub">${imgTag(ctx, st.publishedOnly, st.title + ", published")}<figcaption>Published; no render of ours</figcaption></figure></div></div>`;
+  if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub"><figcaption>Original; there is no figure of ours</figcaption>${imgTag(ctx, st.publishedOnly, st.title + ", original")}</figure></div></div>`;
   // what the pull request measured for each curve, and why: there for who wants it, closed, below the question.
   // A figure with no picture at all has nothing else to show, so it starts open.
   const n = st.items.length;

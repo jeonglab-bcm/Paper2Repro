@@ -187,12 +187,22 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(!html.includes("Needs work") && !html.includes("Accept"));
 });
 
-test("pictures come from the commit, published next to ours", () => {
+test("a figure shows the original, ours and the overlap at once, each named", () => {
   const { html } = core.reviewHtml(review(), ctx);
-  assert.ok(html.includes('<figure class="pub"><img src="https://raw.example/PMC1/figure-reproduction/published/figure-1.png"'));
-  assert.ok(html.includes('<figure class="ours"><img src="https://raw.example/PMC1/figure-reproduction/output/fig1_ours.png"'));
-  assert.ok(html.includes('<figure class="ovl">'));
-  assert.ok(!html.includes(".svg"));
+  const fig1 = html.slice(html.indexOf('id="fig-1"'), html.indexOf('id="fig-2"'));
+  assert.ok(fig1.includes('<div class="viewer" data-mode="side" data-n="3">'));
+  assert.ok(fig1.includes('<figure class="pub"><figcaption>Original</figcaption><img src="https://raw.example/PMC1/figure-reproduction/published/figure-1.png"'));
+  assert.ok(fig1.includes('<figure class="ours"><figcaption>Ours</figcaption><img src="https://raw.example/PMC1/figure-reproduction/output/fig1_ours.png"'));
+  assert.ok(fig1.includes('<figure class="ovl"><figcaption>Overlap</figcaption><img src="https://raw.example/PMC1/figure-reproduction/output/fig1_overlay.png"'));
+  const order = ["<figcaption>Original</figcaption>", "<figcaption>Ours</figcaption>", "<figcaption>Overlap</figcaption>"].map((x) => fig1.indexOf(x));
+  assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], String(order));
+  assert.deepEqual([...fig1.matchAll(/data-m="(\w+)"[^>]*>([^<]+)</g)].map((m) => m[2]), ["Side by side", "Overlap, large", "Swipe", "Blink"]);
+  assert.ok(!html.includes("Published") && !html.includes("Overlay") && !html.includes(".svg"));
+  // a reproduction that made no overlap picture: the original and ours, and no view of the overlap
+  const r = review();
+  r.papers[0].results.items[0].outputs = ["figure-reproduction/output/fig1_ours.png"];
+  const two = core.reviewHtml(r, ctx).html;
+  assert.ok(two.includes('data-mode="side" data-n="2"') && !two.includes('class="ovl"') && !two.includes("Overlap"));
 });
 
 test("only the method and what is shared is shown as code", () => {
