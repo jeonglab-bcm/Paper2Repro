@@ -24,14 +24,23 @@ class GitHubError extends Error {
     this.wantsToken = wantsToken;
   }
 }
-const cache = new Map();
-async function api(path) {
-  if (cache.has(path)) return cache.get(path);
+const cache = new Map(); // what GitHub answered in this tab: path (and tag) → {at, data}
+const FRESH_MS = 20000;
+/**
+ * GitHub's answer to a GET. An answer this tab already has is used again, with two exceptions.
+ * `fresh` is for what changes while a page is open (the head of a pull request, the list of what
+ * is open): it is asked again once the answer is 20 seconds old. `tag` is for what depends on a
+ * commit (the files of a pull request): the answer for another tag is not used.
+ * The browser's own cache is passed by, as it keeps GitHub's answers for a minute.
+ */
+async function api(path, { fresh = false, tag = "" } = {}) {
+  const key = tag ? `${path} @${tag}` : path, hit = cache.get(key);
+  if (hit && !(fresh && Date.now() - hit.at > FRESH_MS)) return hit.data;
   const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
   if (token()) headers.Authorization = `Bearer ${token()}`;
   let res;
   try {
-    res = await fetch(API + path, { headers });
+    res = await fetch(API + path, { headers, cache: "no-cache" });
   } catch {
     throw new GitHubError(0, "Cannot reach GitHub. Check the network and try again.");
   }
@@ -46,13 +55,13 @@ async function api(path) {
     throw new GitHubError(res.status, `GitHub answered ${res.status}.`, res.status === 403 && !token());
   }
   const data = await res.json();
-  cache.set(path, data);
+  cache.set(key, { at: Date.now(), data });
   return data;
 }
-async function apiAll(path, pages = 30) {
+async function apiAll(path, { pages = 30, tag = "" } = {}) {
   const out = [];
   for (let page = 1; page <= pages; page++) {
-    const part = await api(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
+    const part = await api(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`, { tag });
     out.push(...part);
     if (part.length < 100) break;
   }
@@ -91,8 +100,8 @@ async function loadReview(link) {
   const base = `/repos/${owner}/${repo}`;
   let review, baseSha, apiFiles;
   if (link.kind === "pull") {
-    const pr = await api(`${base}/pulls/${link.number}`);
-    apiFiles = await apiAll(`${base}/pulls/${link.number}/files`);
+    const pr = await api(`${base}/pulls/${link.number}`, { fresh: true });
+    apiFiles = await apiAll(`${base}/pulls/${link.number}/files`, { tag: pr.head.sha });
     baseSha = pr.base.sha;
     review = {
       label: `#${pr.number}`, title: pr.title, url: pr.html_url, number: pr.number, branch: pr.head.ref,
@@ -106,7 +115,7 @@ async function loadReview(link) {
     let branch = link.branch, cmp = null, last = null;
     for (let i = 0; i < 5 && branch; i++) {
       try {
-        cmp = await api(`${base}/compare/${core.encPath(baseRef)}...${core.encPath(branch)}`);
+        cmp = await api(`${base}/compare/${core.encPath(baseRef)}...${core.encPath(branch)}`, { fresh: true });
         break;
       } catch (err) {
         last = err;
@@ -115,9 +124,9 @@ async function loadReview(link) {
       }
     }
     if (!cmp) throw last;
-    const open = await api(`${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`).catch(() => []);
+    const open = await api(`${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`, { fresh: true }).catch(() => []);
     if (open.length) return loadReview({ owner, repo, kind: "pull", number: open[0].number });
-    const tip = cmp.commits && cmp.commits.length ? cmp.commits[cmp.commits.length - 1] : await api(`${base}/commits/${core.encPath(branch)}`);
+    const tip = cmp.commits && cmp.commits.length ? cmp.commits[cmp.commits.length - 1] : await api(`${base}/commits/${core.encPath(branch)}`, { fresh: true });
     apiFiles = cmp.files || [];
     baseSha = cmp.merge_base_commit && cmp.merge_base_commit.sha;
     review = {
@@ -157,6 +166,40 @@ let shown = null; // the address (search part) of what is on the page
 function mount(html) {
   app.innerHTML = html;
 }
+
+// A page that stays open: when the reader comes back to it, GitHub is asked whether what it
+// shows is still the latest. The first page is drawn again; a review says that there is a new
+// commit and waits for the reader, who may be in the middle of it.
+let current = null; // what is on the page: {refresh()} for the first page, {link, sha, head()} for a review
+let asked = 0;      // when GitHub was last asked
+// Each asking is one of the 60 requests an hour GitHub allows without a token: then every 5 minutes at most, with a token every minute.
+const recheckMs = () => (token() ? 60000 : 300000);
+function showing(what) {
+  current = what;
+  asked = Date.now();
+  document.querySelector(".stale")?.remove();
+}
+async function recheck() {
+  const mine = current;
+  if (!mine || document.visibilityState !== "visible" || Date.now() - asked < recheckMs()) return;
+  asked = Date.now();
+  try {
+    if (mine.refresh) return void (await mine.refresh());
+    const sha = await mine.head();
+    if (current !== mine || !sha || sha === mine.sha || document.querySelector(".stale")) return;
+    const bar = document.createElement("div");
+    bar.className = "stale";
+    bar.setAttribute("role", "status");
+    bar.innerHTML = `<span>There is a new commit, <b class="mono">${core.esc(sha.slice(0, 7))}</b>. This page shows <b class="mono">${core.esc(mine.sha.slice(0, 7))}</b>. Your decisions are kept.</span>` +
+      '<button type="button" class="btn now">Show the latest</button><button type="button" class="linkish later">Later</button>';
+    bar.querySelector(".now").addEventListener("click", () => render());
+    bar.querySelector(".later").addEventListener("click", () => bar.remove()); // it is said again the next time the reader comes back
+    document.body.append(bar);
+  } catch { /* GitHub did not answer: the page stays, and the next return asks again */ }
+}
+document.addEventListener("visibilitychange", recheck);
+window.addEventListener("focus", recheck);
+window.addEventListener("pageshow", (ev) => { if (ev.persisted) recheck(); });
 function go(route) {
   history.pushState({}, "", route || "./");
   render();
@@ -176,6 +219,7 @@ async function render() {
   }
   document.title = "Reproduction review";
   document.body.classList.remove("deck");
+  showing(null);
   if (!link || link.kind === "repo") return home(link ? `${link.owner}/${link.repo}` : DEFAULT_REPO);
   const name = link.kind === "pull" ? `#${link.number}` : link.branch;
   messagePage(`Reading ${name} of ${link.owner}/${link.repo} from GitHub…`, { busy: true });
@@ -194,6 +238,12 @@ async function render() {
     if (route !== location.search) { history.replaceState({}, "", route + location.hash); shown = location.search; }
     wireReview(review, c, summary);
     remember(review, route, summary);
+    const repoPath = `/repos/${c.owner}/${c.repo}`;
+    showing({
+      link, sha: review.sha,
+      head: async () => (review.number ? (await api(`${repoPath}/pulls/${review.number}`, { fresh: true })).head.sha
+        : (await api(`${repoPath}/commits/${core.encPath(review.branch)}`, { fresh: true })).sha),
+    });
     if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   } catch (err) {
     if (!(err instanceof GitHubError)) console.error(err);
@@ -246,9 +296,11 @@ async function home(repo) {
   draw(null, "");
   if (!repo) return;
   const mine = shown;
+  const listPath = `/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=50`;
+  const sigOf = (list) => list.map((p) => [p.number, p.head && p.head.sha, p.title, p.draft].join(" ")).join("|");
   let pulls;
   try {
-    pulls = await api(`/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=50`);
+    pulls = await api(listPath, { fresh: true });
   } catch (err) {
     if (shown !== mine) return;
     const note = app.querySelector(".home-note");
@@ -261,6 +313,12 @@ async function home(repo) {
   }
   if (shown !== mine || home.run !== run) return;
   draw(pulls, "");
+  showing({
+    refresh: async () => {
+      const next = await api(listPath, { fresh: true });
+      if (home.run === run && sigOf(next) !== sigOf(pulls)) home(repo);
+    },
+  });
   const [owner, name] = repo.split("/");
   // what the pull request itself says: its verdicts, the paper's name
   const fill = (card) => {
@@ -567,6 +625,7 @@ function wireReview(review, c, summary) {
     if (!runs.length || !slot) return;
     const bad = ["failure", "timed_out", "cancelled", "action_required", "startup_failure"];
     const state = runs.some((r) => r.status !== "completed") ? "running" : runs.some((r) => bad.includes(r.conclusion)) ? "failed" : "passed";
+    if (state === "running") cache.delete(`/repos/${c.owner}/${c.repo}/commits/${c.sha}/check-runs?per_page=100`);
     slot.outerHTML = `<span class="chip ci-${state}">checks ${state}</span>`;
   }).catch(() => {});
 }
