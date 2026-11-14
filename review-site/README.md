@@ -10,10 +10,18 @@ page shows what a reviewer has to judge:
   figure), **Ours**, and the **Overlap** (both drawn on top of each other). The overlap can be
   enlarged, and the original and ours can be swiped or blinked.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
-- **The decision, right below each figure and each table.** "The pull request says Partly.
-  Your verdict:" with **Agrees**, **Partly** and **Differs**, and a comment box. Where there is
-  nothing to judge (a figure that was not attempted, a check) the question is **OK** or
-  **Not OK**. There is no separate list of decisions.
+- **The decision, right below each figure and each table.** "The pull request says Partly."
+  with **Agree** and **Disagree**.
+  - **Agree** is one click: the pull request's verdict stands, and the next figure or table
+    that is not decided comes to the top.
+  - **Disagree** opens your own verdict (the two the pull request did not give, of **Agrees**,
+    **Partly** and **Differs**) and a box for the reason. Nothing is decided until you pick the
+    verdict.
+  - Where there is nothing to judge (a figure that was not attempted, a check) the question is
+    **OK** or **Not OK**, and Not OK opens the reason.
+  - What you agreed with can still get a comment: **Add a comment**.
+
+  There is no separate list of decisions.
 - **Details, closed.** One line below the question opens what the pull request measured (each
   curve's score against the pass mark and the best control, the numbers) and why the result
   is not a plain match (the cause and what was tested, the choices the paper does not give,
@@ -32,9 +40,10 @@ page shows what a reviewer has to judge:
    where each stands for you (see below).
 2. Paste a link, anywhere on that page: `https://github.com/owner/repo/pull/40`, a branch
    (`.../tree/my-branch`), a comparison (`.../compare/main...my-branch`), or `owner/repo#40`.
-3. Decide below each figure and table. **Next not decided** in the bar at the bottom jumps to
-   the next one, and at the end one button agrees with the pull request on everything you
-   left open. Decisions stay in your browser.
+3. Below each figure and table, press **Agree** to pass it, or **Disagree** to give your own
+   verdict and the reason. **Next not decided** in the bar at the bottom jumps to the next
+   one, and at the end one button agrees with the pull request on everything you left open.
+   Decisions stay in your browser.
 4. **Copy review** puts your decisions on the clipboard as text, the verdicts you want changed
    first (`Fig. 2: Partly → Agrees. <your comment>`). Paste it in the pull request.
 
@@ -88,9 +97,8 @@ table fills the screen, with its verdict buttons below it.
 
 - **One picture at a time.** Original, Ours and Overlap are three tabs; the overlap shows
   first, and a tap on the picture goes to the next one.
-- **A verdict brings the next card.** If your verdict is what the pull request says, the next
-  card comes by itself. If you change it, or say Not OK, the card stays for your comment, and
-  **Next** goes on.
+- **Agree brings the next card.** **Disagree** stays on the card and opens your verdict and the
+  reason below the picture; so does Not OK. **Next** goes on from there.
 - **‹ and ›** in the bar at the top go back and forward. The bar shows where you are
   ("2 / 13") and how much is decided.
 - **The last card** says what is left, lists your decisions apart (not decided, to change,

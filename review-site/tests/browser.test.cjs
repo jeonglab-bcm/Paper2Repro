@@ -134,11 +134,41 @@ async function small(browser, base) {
 
   await step("a verdict of your own and a comment are kept and counted", async () => {
     const fig = page.locator("#fig-1 .dbox"), table = page.locator("#i-table1 + .dbox"), drawing = page.locator("#fig-2 .dbox");
-    assert.match(await fig.locator(".ask").textContent(), /The pull request says Partly\. Your verdict:/);
-    await fig.locator('button[data-v="agrees"]').click();
+    // a decision is Agree or Disagree; the verdicts and the reason come with Disagree
+    assert.equal(await fig.locator(".ask").first().textContent(), "The pull request says Partly.");
+    assert.deepEqual(await fig.locator(".decide button:visible").allTextContents(), ["Agree", "Disagree"]);
+    assert.equal(await fig.locator("textarea").isVisible(), false);
+    await fig.locator(".differ").click();
+    assert.deepEqual(await fig.locator(".mine button:visible").allTextContents(), ["Agrees", "Differs"]); // not Partly again
+    assert.equal(await fig.locator("textarea").getAttribute("placeholder"), "Why? For the author");
+    assert.equal(await page.locator(".bar .done").textContent(), "0"); // nothing is decided by Disagree alone
+    await fig.locator(".differ").click(); // and it closes again
+    assert.equal(await fig.locator(".mine").isVisible(), false);
+    assert.equal(await fig.locator("textarea").isVisible(), false);
+    await fig.locator(".differ").click();
+    await fig.locator('.mine button[data-v="agrees"]').click();
     assert.equal(await fig.locator(".state").textContent(), "You say: Agrees");
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), "TEXTAREA"); // the reason is next
     await fig.locator("textarea").fill("The curve agrees within noise.");
-    await table.locator('button[data-v="differs"]').click(); // the same as the pull request
+    // Agree passes it: one click, and the next one not decided comes to the top
+    await table.locator('button[data-v="same"]').click();
+    assert.equal(await table.locator(".state").textContent(), "You agree: Differs");
+    assert.equal(await table.locator(".mine").isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Text");
+    // (to the top, or as far as this short page scrolls)
+    await page.waitForFunction(() => { const top = document.querySelectorAll(".nblock")[1].getBoundingClientRect().top; return top >= 0 && (top < 120 || scrollY >= document.documentElement.scrollHeight - innerHeight - 2); });
+    assert.ok(await page.evaluate(() => scrollY > 1000));
+    // what is agreed can still get a comment, one click away
+    assert.equal(await table.locator("textarea").isVisible(), false);
+    await table.locator(".addnote").click();
+    assert.equal(await table.locator("textarea").getAttribute("placeholder"), "Comment for the author");
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), "TEXTAREA");
+    // Disagree takes an agreement back, and Agree a disagreement
+    await table.locator(".differ").click();
+    assert.deepEqual([await table.locator(".state").textContent(), await page.locator(".bar .done").textContent()], ["", "1"]);
+    await table.locator('.mine button[data-v="partly"]').click();
+    assert.equal(await table.locator(".state").textContent(), "You say: Partly");
+    await table.locator('button[data-v="same"]').click();
     assert.equal(await table.locator(".state").textContent(), "You agree: Differs");
     assert.equal(await drawing.locator(".ask").textContent(), "Is this OK?");
     await drawing.locator('button[data-v="no"]').click();
@@ -368,9 +398,10 @@ async function small(browser, base) {
     // one card on the screen, and it fits: the picture above, the verdict buttons below
     assert.equal(await page.locator(".station:visible, .nblock:visible, .outside:visible").count(), 1);
     assert.equal(await page.locator(".top").isVisible(), false);
+    assert.deepEqual(await page.locator(".current .decide .opts button:visible").allTextContents(), ["Agree", "Disagree"]);
     const fit = await page.evaluate(() => {
       const card = document.querySelector(".current").getBoundingClientRect(), stage = document.querySelector(".current .stage").getBoundingClientRect();
-      const buttons = [...document.querySelectorAll(".current .decide .opts button")].map((b) => b.getBoundingClientRect());
+      const buttons = [...document.querySelectorAll(".current .decide .opts button")].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect());
       return { cardBottom: Math.round(card.bottom), stageH: Math.round(stage.height), buttonsBelowPicture: buttons.every((b) => b.top >= stage.bottom), buttonsOnScreen: buttons.every((b) => b.bottom <= innerHeight), wide: buttons.every((b) => b.height >= 44) };
     });
     assert.deepEqual([fit.cardBottom, fit.buttonsBelowPicture, fit.buttonsOnScreen, fit.wide], [844, true, true, true], JSON.stringify(fit));
@@ -386,8 +417,14 @@ async function small(browser, base) {
     await v.locator('.pick button[data-m="ours"]').click();
     assert.equal(await v.locator(".ours").isVisible(), true);
     assert.equal(await v.locator(".pub").isVisible(), false);
-    // a verdict as the pull request says goes straight to the next card
-    await page.locator('.current .decide button[data-v="partly"]').click();
+    // Disagree stays on the card and opens the verdicts and the reason, all on the screen
+    await page.locator(".current .differ").click();
+    assert.deepEqual(await page.locator(".current .mine button:visible").allTextContents(), ["Agrees", "Differs"]);
+    assert.equal(await page.locator(".current textarea").isVisible(), true);
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll(".current .mine button, .current textarea")].every((x) => x.getBoundingClientRect().bottom <= innerHeight)));
+    assert.equal(await title(), "Fig. 1");
+    // Agree goes straight to the next card
+    await page.locator('.current .decide button[data-v="same"]').click();
     await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Fig. 2");
     assert.equal(await count(), "2 / 5");
     // a change stays for the comment, and Next goes on
@@ -403,7 +440,7 @@ async function small(browser, base) {
     assert.equal(await title(), "Fig. 2");
     assert.equal(await page.locator(".current .state").textContent(), "Not OK");
     await page.locator(".dnext").click();
-    await page.locator('.current .decide button[data-v="differs"]').click();
+    await page.locator('.current .decide button[data-v="same"]').click();
     await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Text");
     await page.locator(".dnext").click();
     assert.equal(await title(), "Changes outside the paper folder");

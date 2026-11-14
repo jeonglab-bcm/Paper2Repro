@@ -540,15 +540,26 @@ export function mapHtml(units, said, foot = "") {
   return '<h3 class="mhead">Your review</h3>' + row("open", "Not decided", rows.open) + row("change", "To change", rows.change) + row("same", "Agreed", rows.same) +
     (foot ? `<p class="mfoot">${esc(foot)}</p>` : "");
 }
-const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author"></textarea>';
-/** The decision that sits right below a figure or a table: the question, the comment, then the closed details. */
+const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author" hidden></textarea>';
+/**
+ * The decision that sits right below a figure or a table. One click passes what the reviewer
+ * agrees with: Agree (the pull request's verdict stands), or OK where there is no verdict.
+ * Disagree opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
+ * details come last.
+ */
 function boxHtml(unit, details = "") {
-  const ask = unit.ask === "verdict"
-    ? `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>. Your verdict${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}:</span>` +
-      `<span class="opts">${["agrees", "partly", "differs"].map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span>`
-    : '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
+  let ask, mine = "";
+  if (unit.ask === "verdict") {
+    const others = ["agrees", "partly", "differs"].filter((v) => v !== unit.given);
+    ask = `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}.</span>` +
+      '<span class="opts"><button type="button" data-v="same">Agree</button><button type="button" class="differ">Disagree</button></span>';
+    mine = `<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts">${others.map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span></div>`;
+  } else {
+    ask = '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
+  }
   return `<div class="dbox" id="d-${unit.key}" data-key="${unit.key}" data-title="${esc(unit.title)}" data-ask="${unit.ask}" data-given="${esc(unit.given)}" data-given-text="${esc(unit.givenText)}" tabindex="-1">` +
-    `${unit.notes || ""}<footer class="decide">${ask}<span class="state" aria-live="polite"></span><button type="button" class="dgo">Next</button>${COMMENT}</footer>${details}</div>`;
+    `${unit.notes || ""}<footer class="decide">${ask}${mine}${COMMENT}<span class="state" aria-live="polite"></span>` +
+    `<button type="button" class="linkish addnote" hidden>Add a comment</button><button type="button" class="dgo">Next</button></footer>${details}</div>`;
 }
 export const fileAnchor = (path) => cardKey("file", path).slice(0, 10);
 const delta = (f) => `<span class="delta"><b class="add">+${f.added}</b>${f.deleted ? ` <b class="del">−${f.deleted}</b>` : ""}</span>`;

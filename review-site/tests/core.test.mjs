@@ -163,22 +163,34 @@ test("each figure and each table has its decision right below it", () => {
   const fig1 = part('id="fig-1"', 'id="fig-2"');
   assert.equal((fig1.match(/<div class="dbox"/g) || []).length, 1);
   assert.ok(fig1.includes('data-title="Fig. 1" data-ask="verdict" data-given="partly" data-given-text="Partly"'));
-  assert.ok(fig1.includes("The pull request says <b>Partly</b>. Your verdict:"));
+  // one click agrees; Disagree opens the reviewer's own verdict (not the pull request's again) and the reason
+  assert.ok(fig1.includes('<span class="ask">The pull request says <b>Partly</b>.</span><span class="opts"><button type="button" data-v="same">Agree</button><button type="button" class="differ">Disagree</button></span>'));
+  assert.ok(fig1.includes('<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts"><button type="button" data-v="agrees">Agrees</button><button type="button" data-v="differs">Differs</button></span></div>'));
+  assert.ok(fig1.includes('aria-label="Comment for the author" hidden></textarea>') && fig1.includes('<button type="button" class="linkish addnote" hidden>Add a comment</button>'));
+  assert.ok(fig1.indexOf('class="mine"') < fig1.indexOf("<textarea") && fig1.indexOf("<textarea") < fig1.indexOf('<details class="info">'));
   const order = ['class="viewer"', 'class="dbox"', 'class="decide"', '<details class="info">', 'class="irow"', "Our curve is lower.", "2 of 2 tested causes ruled out"].map((x) => fig1.indexOf(x));
   assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
   assert.ok(!html.includes("<svg") && !html.includes('class="chart"')); // no charts drawn by the page
   // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
   const fig2 = part('id="fig-2"', 'id="numbers-0"');
-  assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict"));
+  assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict") && !fig2.includes("Disagree"));
+  assert.ok(fig2.includes('<button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button>'));
   assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
   // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
   const table = part('id="i-table1"', 'id="i-text.n"');
-  assert.ok(table.includes("The pull request says <b>Differs</b>. Your verdict:"));
+  assert.ok(table.includes("The pull request says <b>Differs</b>.</span>") && table.includes('data-v="agrees">Agrees</button><button type="button" data-v="partly">Partly</button></span></div>'));
   assert.ok(table.indexOf('class="matrix"') < table.indexOf('class="decide"') && table.indexOf('class="decide"') < table.indexOf("<summary>Details: why</summary>"));
   assert.ok(table.includes("Within 2 points."));
   assert.ok(table.includes("1 choice the paper does not give") && table.includes("UniRef100 for nr"));
   assert.ok(table.includes("1 value the paper prints that does not follow from its own numbers") && table.includes("79.91, not 79.96"));
-  assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 3);
+  assert.equal((html.match(/<button type="button" data-v="same">Agree<\/button>/g) || []).length, 3); // Fig. 1, Table 1, the number in the text
+  assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 2); // not where the pull request says Exact
+  // a figure of several verdicts: Agree is as the pull request says, and Disagree offers all three
+  const r = review();
+  r.papers[0].results.items.push({ ...r.papers[0].results.items[0], id: "fig1.b", verdict: "differs" });
+  const mixed = core.reviewHtml(r, ctx).html;
+  assert.ok(mixed.includes("The pull request says <b>1 partly, 1 differs</b> for Fig. 1.</span>"));
+  assert.ok(mixed.includes('data-v="agrees">Agrees</button><button type="button" data-v="partly">Partly</button><button type="button" data-v="differs">Differs</button>'));
   // what changed outside the paper folder is decided where its diff is
   const code = html.slice(html.indexOf('id="code"'));
   assert.ok(code.includes('data-title="Changes outside the paper folder" data-ask="ok"'));
