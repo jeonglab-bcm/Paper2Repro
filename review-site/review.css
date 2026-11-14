@@ -467,7 +467,7 @@ body.deck .deckend > div { width: 100%; margin: auto 0; }
 .stale .btn { min-height: 32px; background: var(--bg); color: var(--ink); border-color: var(--bg); }
 .stale .later { color: inherit; opacity: .8; min-height: 32px; padding: 0 4px; }
 
-/* a decision: Accept passes it; Reject opens the reviewer's own verdict and the reason */
+/* a decision: Accept passes it; Revise opens the reviewer's own verdict and the reason */
 .decide .mine { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .decide button[data-v="same"][aria-pressed="true"] { background: var(--ours); border-color: var(--ours); color: #fff; }
 .decide .differ[aria-pressed="true"], .decide .mine button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }

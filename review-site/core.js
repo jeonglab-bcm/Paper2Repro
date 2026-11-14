@@ -544,7 +544,7 @@ const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-la
 /**
  * The decision that sits right below a figure or a table. One click passes what the reviewer
  * agrees with: Accept (the pull request's verdict stands), or OK where there is no verdict.
- * Reject opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
+ * Revise opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
  * details come last.
  */
 function boxHtml(unit, details = "") {
@@ -552,7 +552,7 @@ function boxHtml(unit, details = "") {
   if (unit.ask === "verdict") {
     const others = ["agrees", "partly", "differs"].filter((v) => v !== unit.given);
     ask = `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}.</span>` +
-      '<span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Reject</button></span>';
+      '<span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Revise</button></span>';
     mine = `<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts">${others.map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span></div>`;
   } else {
     ask = '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';

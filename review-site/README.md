@@ -11,10 +11,10 @@ page shows what a reviewer has to judge:
   enlarged, and the original and ours can be swiped or blinked.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
 - **The decision, right below each figure and each table.** "The pull request says Partly."
-  with **Accept** and **Reject**.
+  with **Accept** and **Revise**.
   - **Accept** is one click: the pull request's verdict stands, and the next figure or table
     that is not decided comes to the top.
-  - **Reject** opens your own verdict (the two the pull request did not give, of **Agrees**,
+  - **Revise** opens your own verdict (the two the pull request did not give, of **Agrees**,
     **Partly** and **Differs**) and a box for the reason. Nothing is decided until you pick the
     verdict.
   - Where there is nothing to judge (a figure that was not attempted, a check) the question is
@@ -40,7 +40,7 @@ page shows what a reviewer has to judge:
    where each stands for you (see below).
 2. Paste a link, anywhere on that page: `https://github.com/owner/repo/pull/40`, a branch
    (`.../tree/my-branch`), a comparison (`.../compare/main...my-branch`), or `owner/repo#40`.
-3. Below each figure and table, press **Accept** to pass it, or **Reject** to give your own
+3. Below each figure and table, press **Accept** to pass it, or **Revise** to give your own
    verdict and the reason. **Next not decided** in the bar at the bottom jumps to the next
    one, and at the end one button accepts everything you left open as the pull request says.
    Decisions stay in your browser.
@@ -97,7 +97,7 @@ table fills the screen, with its verdict buttons below it.
 
 - **One picture at a time.** Original, Ours and Overlap are three tabs; the overlap shows
   first, and a tap on the picture goes to the next one.
-- **Accept brings the next card.** **Reject** stays on the card and opens your verdict and the
+- **Accept brings the next card.** **Revise** stays on the card and opens your verdict and the
   reason below the picture; so does Not OK. **Next** goes on from there.
 - **‹ and ›** in the bar at the top go back and forward. The bar shows where you are
   ("2 / 13") and how much is decided.

@@ -134,14 +134,14 @@ async function small(browser, base) {
 
   await step("a verdict of your own and a comment are kept and counted", async () => {
     const fig = page.locator("#fig-1 .dbox"), table = page.locator("#i-table1 + .dbox"), drawing = page.locator("#fig-2 .dbox");
-    // a decision is Accept or Reject; the verdicts and the reason come with Reject
+    // a decision is Accept or Revise; the verdicts and the reason come with Revise
     assert.equal(await fig.locator(".ask").first().textContent(), "The pull request says Partly.");
-    assert.deepEqual(await fig.locator(".decide button:visible").allTextContents(), ["Accept", "Reject"]);
+    assert.deepEqual(await fig.locator(".decide button:visible").allTextContents(), ["Accept", "Revise"]);
     assert.equal(await fig.locator("textarea").isVisible(), false);
     await fig.locator(".differ").click();
     assert.deepEqual(await fig.locator(".mine button:visible").allTextContents(), ["Agrees", "Differs"]); // not Partly again
     assert.equal(await fig.locator("textarea").getAttribute("placeholder"), "Why? For the author");
-    assert.equal(await page.locator(".bar .done").textContent(), "0"); // nothing is decided by Reject alone
+    assert.equal(await page.locator(".bar .done").textContent(), "0"); // nothing is decided by Revise alone
     await fig.locator(".differ").click(); // and it closes again
     assert.equal(await fig.locator(".mine").isVisible(), false);
     assert.equal(await fig.locator("textarea").isVisible(), false);
@@ -163,7 +163,7 @@ async function small(browser, base) {
     await table.locator(".addnote").click();
     assert.equal(await table.locator("textarea").getAttribute("placeholder"), "Comment for the author");
     assert.equal(await page.evaluate(() => document.activeElement.tagName), "TEXTAREA");
-    // Reject takes back what was accepted, and Accept what was rejected
+    // Revise takes back what was accepted, and Accept what was revised
     await table.locator(".differ").click();
     assert.deepEqual([await table.locator(".state").textContent(), await page.locator(".bar .done").textContent()], ["", "1"]);
     await table.locator('.mine button[data-v="partly"]').click();
@@ -398,7 +398,7 @@ async function small(browser, base) {
     // one card on the screen, and it fits: the picture above, the verdict buttons below
     assert.equal(await page.locator(".station:visible, .nblock:visible, .outside:visible").count(), 1);
     assert.equal(await page.locator(".top").isVisible(), false);
-    assert.deepEqual(await page.locator(".current .decide .opts button:visible").allTextContents(), ["Accept", "Reject"]);
+    assert.deepEqual(await page.locator(".current .decide .opts button:visible").allTextContents(), ["Accept", "Revise"]);
     const fit = await page.evaluate(() => {
       const card = document.querySelector(".current").getBoundingClientRect(), stage = document.querySelector(".current .stage").getBoundingClientRect();
       const buttons = [...document.querySelectorAll(".current .decide .opts button")].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect());
@@ -417,7 +417,7 @@ async function small(browser, base) {
     await v.locator('.pick button[data-m="ours"]').click();
     assert.equal(await v.locator(".ours").isVisible(), true);
     assert.equal(await v.locator(".pub").isVisible(), false);
-    // Reject stays on the card and opens the verdicts and the reason, all on the screen
+    // Revise stays on the card and opens the verdicts and the reason, all on the screen
     await page.locator(".current .differ").click();
     assert.deepEqual(await page.locator(".current .mine button:visible").allTextContents(), ["Agrees", "Differs"]);
     assert.equal(await page.locator(".current textarea").isVisible(), true);

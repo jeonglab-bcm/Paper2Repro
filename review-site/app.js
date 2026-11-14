@@ -382,13 +382,13 @@ function wireReview(review, c, summary) {
     const block = box.closest(".station, .nblock, .outside");
     if (block) block.dataset.mine = !s.v ? "" : agreesWithPr(box, s.v) ? "same" : "change";
     const same = !!s.v && agreesWithPr(box, s.v), change = !!s.v && !same;
-    // Reject is open while the reviewer picks a verdict of their own, and stays open once there is one
+    // Revise is open while the reviewer picks a verdict of their own, and stays open once there is one
     const differs = box.dataset.ask === "verdict" && (change || box.dataset.open === "1");
     box.querySelectorAll(".decide [data-v]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === "same" ? same : b.dataset.v === s.v)));
     box.querySelector(".differ")?.setAttribute("aria-pressed", String(differs));
     const panel = box.querySelector(".mine");
     if (panel) panel.hidden = !differs;
-    // the reason shows where the reviewer rejects; a comment on what is accepted is one click away
+    // the reason shows where the reviewer revises the verdict; a comment on what is accepted is one click away
     const ta = box.querySelector("textarea"), noted = differs || change || !!s.note || box.dataset.note === "1";
     ta.hidden = !noted;
     ta.placeholder = differs || change ? "Why? For the author" : "Comment for the author";
@@ -442,7 +442,7 @@ function wireReview(review, c, summary) {
       if (!on && (inPanel || v === "no") && window.matchMedia("(pointer: fine)").matches) box.querySelector("textarea").focus({ preventScroll: true });
       passOn(box);
     }));
-    // Reject: the reviewer's own verdict and the reason show; what was accepted is taken back
+    // Revise: the reviewer's own verdict and the reason show; what was accepted is taken back
     box.querySelector(".differ")?.addEventListener("click", (ev) => decide("", ev.currentTarget.getAttribute("aria-pressed") !== "true"));
     box.querySelector(".addnote").addEventListener("click", () => {
       box.dataset.note = "1";
@@ -459,7 +459,7 @@ function wireReview(review, c, summary) {
     });
   });
   // What is accepted is passed: on a card the next card comes, on the page the next figure or table
-  // that is not decided comes to the top. What is rejected stays, for its verdict and reason.
+  // that is not decided comes to the top. What is revised stays, for its verdict and reason.
   const passOn = (box) => {
     if (deck.on) return deck.decided(box);
     const s = said(repo, box.dataset.key);
