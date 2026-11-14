@@ -134,12 +134,42 @@ async function small(browser, base) {
 
   await step("a verdict of your own and a comment are kept and counted", async () => {
     const fig = page.locator("#fig-1 .dbox"), table = page.locator("#i-table1 + .dbox"), drawing = page.locator("#fig-2 .dbox");
-    assert.match(await fig.locator(".ask").textContent(), /The pull request says Partly\. Your verdict:/);
-    await fig.locator('button[data-v="agrees"]').click();
+    // a decision is Accept or Revise; the verdicts and the reason come with Revise
+    assert.equal(await fig.locator(".ask").first().textContent(), "The pull request says Partly.");
+    assert.deepEqual(await fig.locator(".decide button:visible").allTextContents(), ["Accept", "Revise"]);
+    assert.equal(await fig.locator("textarea").isVisible(), false);
+    await fig.locator(".differ").click();
+    assert.deepEqual(await fig.locator(".mine button:visible").allTextContents(), ["Agrees", "Differs"]); // not Partly again
+    assert.equal(await fig.locator("textarea").getAttribute("placeholder"), "Why? For the author");
+    assert.equal(await page.locator(".bar .done").textContent(), "0"); // nothing is decided by Revise alone
+    await fig.locator(".differ").click(); // and it closes again
+    assert.equal(await fig.locator(".mine").isVisible(), false);
+    assert.equal(await fig.locator("textarea").isVisible(), false);
+    await fig.locator(".differ").click();
+    await fig.locator('.mine button[data-v="agrees"]').click();
     assert.equal(await fig.locator(".state").textContent(), "You say: Agrees");
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), "TEXTAREA"); // the reason is next
     await fig.locator("textarea").fill("The curve agrees within noise.");
-    await table.locator('button[data-v="differs"]').click(); // the same as the pull request
-    assert.equal(await table.locator(".state").textContent(), "You agree: Differs");
+    // Accept passes it: one click, and the next one not decided comes to the top
+    await table.locator('button[data-v="same"]').click();
+    assert.equal(await table.locator(".state").textContent(), "You accept: Differs");
+    assert.equal(await table.locator(".mine").isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Text");
+    // (to the top, or as far as this short page scrolls)
+    await page.waitForFunction(() => { const top = document.querySelectorAll(".nblock")[1].getBoundingClientRect().top; return top >= 0 && (top < 120 || scrollY >= document.documentElement.scrollHeight - innerHeight - 2); });
+    assert.ok(await page.evaluate(() => scrollY > 1000));
+    // what is accepted can still get a comment, one click away
+    assert.equal(await table.locator("textarea").isVisible(), false);
+    await table.locator(".addnote").click();
+    assert.equal(await table.locator("textarea").getAttribute("placeholder"), "Comment for the author");
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), "TEXTAREA");
+    // Revise takes back what was accepted, and Accept what was revised
+    await table.locator(".differ").click();
+    assert.deepEqual([await table.locator(".state").textContent(), await page.locator(".bar .done").textContent()], ["", "1"]);
+    await table.locator('.mine button[data-v="partly"]').click();
+    assert.equal(await table.locator(".state").textContent(), "You say: Partly");
+    await table.locator('button[data-v="same"]').click();
+    assert.equal(await table.locator(".state").textContent(), "You accept: Differs");
     assert.equal(await drawing.locator(".ask").textContent(), "Is this OK?");
     await drawing.locator('button[data-v="no"]').click();
     await drawing.locator("textarea").fill("Draw it.");
@@ -162,7 +192,7 @@ async function small(browser, base) {
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
     assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1\*\*: Partly → Agrees\. The curve agrees within noise\./);
     assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
-    assert.match(text, /\*\*Agreed \(1\):\*\* Table 1 \(Differs\)/);
+    assert.match(text, /\*\*Accepted \(1\):\*\* Table 1 \(Differs\)/);
     assert.match(text, /\*\*Not decided \(2\)\*\*\n- \*\*Text\*\*\n- \*\*Changes outside the paper folder\*\*/);
     assert.match(await page.locator(".phead .rmap .mfoot").textContent(), /^Review copied .+\. Nothing changed since\.$/);
   });
@@ -174,7 +204,7 @@ async function small(browser, base) {
     assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Changes outside the paper folder");
     assert.equal(await page.locator(".restnote").textContent(), "2 are not decided yet.");
     await page.locator(".restbar .rest").click();
-    assert.equal(await page.locator("#i-text\\.n + .dbox .state").textContent(), "You agree: Agrees"); // the pull request says Exact
+    assert.equal(await page.locator("#i-text\\.n + .dbox .state").textContent(), "You accept: Agrees"); // the pull request says Exact
     assert.equal(await page.locator("#code .dbox .state").textContent(), "OK");
     assert.equal(await page.locator(".bar .done").textContent(), "5");
     assert.equal(await page.locator(".restbar").isVisible(), false);
@@ -211,7 +241,7 @@ async function small(browser, base) {
     assert.equal(await page.locator(".rcard .facts").innerText(), "4 of 5 decided\n2 to change: Fig. 1, Fig. 2");
   });
 
-  await step("the first page keeps apart what is to review, where changes are requested and what is agreed", async () => {
+  await step("the first page keeps apart what is to review, where changes are requested and what is accepted", async () => {
     await page.locator(".rcard").click();
     await page.waitForSelector(".dbox");
     await page.locator('#code .dbox button[data-v="ok"]').click();
@@ -231,7 +261,7 @@ async function small(browser, base) {
     // everything as the pull request says
     await kept(page, (sum, say) => say("Fig. 1", "partly"));
     await home(page, base);
-    assert.deepEqual(await groupsOf(page), [["Agreed 1", ["#7 Agreed"]]]);
+    assert.deepEqual(await groupsOf(page), [["Accepted 1", ["#7 Accepted"]]]);
     assert.equal(await page.locator(".rcard .rchange").count(), 0);
     // the pull request changes after that: it is to review again, and the card says how much
     await kept(page, (sum, say, sha) => { sum.was = sum.sha; sum.sha = sha; }, "0".repeat(40));
@@ -286,7 +316,7 @@ async function small(browser, base) {
     assert.equal(await page.locator('details.file[data-path$="more2.py"]').count(), 1);
     assert.equal(await page.locator(".bar .done").textContent(), "5");
     await home(page, base);
-    assert.deepEqual(await groupsOf(page), [["Agreed 1", ["#7 Agreed"]]]);
+    assert.deepEqual(await groupsOf(page), [["Accepted 1", ["#7 Accepted"]]]);
   });
 
   await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {
@@ -368,9 +398,10 @@ async function small(browser, base) {
     // one card on the screen, and it fits: the picture above, the verdict buttons below
     assert.equal(await page.locator(".station:visible, .nblock:visible, .outside:visible").count(), 1);
     assert.equal(await page.locator(".top").isVisible(), false);
+    assert.deepEqual(await page.locator(".current .decide .opts button:visible").allTextContents(), ["Accept", "Revise"]);
     const fit = await page.evaluate(() => {
       const card = document.querySelector(".current").getBoundingClientRect(), stage = document.querySelector(".current .stage").getBoundingClientRect();
-      const buttons = [...document.querySelectorAll(".current .decide .opts button")].map((b) => b.getBoundingClientRect());
+      const buttons = [...document.querySelectorAll(".current .decide .opts button")].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect());
       return { cardBottom: Math.round(card.bottom), stageH: Math.round(stage.height), buttonsBelowPicture: buttons.every((b) => b.top >= stage.bottom), buttonsOnScreen: buttons.every((b) => b.bottom <= innerHeight), wide: buttons.every((b) => b.height >= 44) };
     });
     assert.deepEqual([fit.cardBottom, fit.buttonsBelowPicture, fit.buttonsOnScreen, fit.wide], [844, true, true, true], JSON.stringify(fit));
@@ -386,8 +417,14 @@ async function small(browser, base) {
     await v.locator('.pick button[data-m="ours"]').click();
     assert.equal(await v.locator(".ours").isVisible(), true);
     assert.equal(await v.locator(".pub").isVisible(), false);
-    // a verdict as the pull request says goes straight to the next card
-    await page.locator('.current .decide button[data-v="partly"]').click();
+    // Revise stays on the card and opens the verdicts and the reason, all on the screen
+    await page.locator(".current .differ").click();
+    assert.deepEqual(await page.locator(".current .mine button:visible").allTextContents(), ["Agrees", "Differs"]);
+    assert.equal(await page.locator(".current textarea").isVisible(), true);
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll(".current .mine button, .current textarea")].every((x) => x.getBoundingClientRect().bottom <= innerHeight)));
+    assert.equal(await title(), "Fig. 1");
+    // Accept goes straight to the next card
+    await page.locator('.current .decide button[data-v="same"]').click();
     await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Fig. 2");
     assert.equal(await count(), "2 / 5");
     // a change stays for the comment, and Next goes on
@@ -403,7 +440,7 @@ async function small(browser, base) {
     assert.equal(await title(), "Fig. 2");
     assert.equal(await page.locator(".current .state").textContent(), "Not OK");
     await page.locator(".dnext").click();
-    await page.locator('.current .decide button[data-v="differs"]').click();
+    await page.locator('.current .decide button[data-v="same"]').click();
     await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Text");
     await page.locator(".dnext").click();
     assert.equal(await title(), "Changes outside the paper folder");
