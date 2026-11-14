@@ -163,8 +163,8 @@ test("each figure and each table has its decision right below it", () => {
   const fig1 = part('id="fig-1"', 'id="fig-2"');
   assert.equal((fig1.match(/<div class="dbox"/g) || []).length, 1);
   assert.ok(fig1.includes('data-title="Fig. 1" data-ask="verdict" data-given="partly" data-given-text="Partly"'));
-  // one click agrees; Disagree opens the reviewer's own verdict (not the pull request's again) and the reason
-  assert.ok(fig1.includes('<span class="ask">The pull request says <b>Partly</b>.</span><span class="opts"><button type="button" data-v="same">Agree</button><button type="button" class="differ">Disagree</button></span>'));
+  // one click accepts; Reject opens the reviewer's own verdict (not the pull request's again) and the reason
+  assert.ok(fig1.includes('<span class="ask">The pull request says <b>Partly</b>.</span><span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Reject</button></span>'));
   assert.ok(fig1.includes('<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts"><button type="button" data-v="agrees">Agrees</button><button type="button" data-v="differs">Differs</button></span></div>'));
   assert.ok(fig1.includes('aria-label="Comment for the author" hidden></textarea>') && fig1.includes('<button type="button" class="linkish addnote" hidden>Add a comment</button>'));
   assert.ok(fig1.indexOf('class="mine"') < fig1.indexOf("<textarea") && fig1.indexOf("<textarea") < fig1.indexOf('<details class="info">'));
@@ -173,7 +173,7 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(!html.includes("<svg") && !html.includes('class="chart"')); // no charts drawn by the page
   // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
   const fig2 = part('id="fig-2"', 'id="numbers-0"');
-  assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict") && !fig2.includes("Disagree"));
+  assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict") && !fig2.includes("Reject"));
   assert.ok(fig2.includes('<button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button>'));
   assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
   // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
@@ -183,9 +183,9 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(table.includes("Within 2 points."));
   assert.ok(table.includes("1 choice the paper does not give") && table.includes("UniRef100 for nr"));
   assert.ok(table.includes("1 value the paper prints that does not follow from its own numbers") && table.includes("79.91, not 79.96"));
-  assert.equal((html.match(/<button type="button" data-v="same">Agree<\/button>/g) || []).length, 3); // Fig. 1, Table 1, the number in the text
+  assert.equal((html.match(/<button type="button" data-v="same">Accept<\/button>/g) || []).length, 3); // Fig. 1, Table 1, the number in the text
   assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 2); // not where the pull request says Exact
-  // a figure of several verdicts: Agree is as the pull request says, and Disagree offers all three
+  // a figure of several verdicts: Accept is as the pull request says, and Reject offers all three
   const r = review();
   r.papers[0].results.items.push({ ...r.papers[0].results.items[0], id: "fig1.b", verdict: "differs" });
   const mixed = core.reviewHtml(r, ctx).html;
@@ -196,7 +196,7 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(code.includes('data-title="Changes outside the paper folder" data-ask="ok"'));
   assert.ok(code.includes("Conflicts with main"));
   assert.ok(code.indexOf('data-path="README.md"') < code.indexOf('class="dbox"'));
-  assert.ok(!html.includes("Needs work") && !html.includes("Accept"));
+  assert.ok(!html.includes("Needs work") && !html.includes(">Agree<") && !html.includes("Disagree")); // "Agree" would read as the verdict Agrees
 });
 
 test("a figure shows the original, ours and the overlap at once, each named", () => {
@@ -253,7 +253,7 @@ test("a decision stands as the pull request says, or asks for a change", () => {
   assert.equal(core.standOf({}, "agrees"), "unknown"); // kept by an older version, without what the pull request said
 });
 
-test("a pull request stands by the reviewer's decisions: to review, changes requested, agreed", () => {
+test("a pull request stands by the reviewer's decisions: to review, changes requested, accepted", () => {
   const { summary } = core.reviewHtml(review(), ctx);
   assert.deepEqual(summary.units.map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Text", "Changes outside the paper folder"]);
   assert.deepEqual(summary.keys, summary.units.map((u) => u.key));
@@ -284,7 +284,7 @@ test("a pull request stands by the reviewer's decisions: to review, changes requ
   assert.notEqual(sig(all), sig({ ...all, [by.Text]: { v: "agrees", note: "a comment" } }));
 });
 
-test("the review page lists the decisions apart: not decided, to change, agreed", () => {
+test("the review page lists the decisions apart: not decided, to change, accepted", () => {
   const { html, summary } = core.reviewHtml(review(), ctx);
   assert.equal((html.match(/<section class="rmap"/g) || []).length, 2); // below the paper's head, and on the last card of a phone
   const by = Object.fromEntries(summary.units.map((u) => [u.title, u.key]));
@@ -298,7 +298,7 @@ test("the review page lists the decisions apart: not decided, to change, agreed"
   assert.ok(!core.mapHtml(summary.units, () => ({})).includes("m-same")); // a row with nothing in it is left out
 });
 
-test("the first page keeps apart what is to review, where changes are requested and what is agreed", () => {
+test("the first page keeps apart what is to review, where changes are requested and what is accepted", () => {
   const pull = (number) => ({ number, title: `Reproduce PMC${number}`, user: { login: "x" }, head: { sha: "abc", ref: "b" } });
   const mine = new Map([
     [1, { state: "agreed", done: 3, all: 3, change: [], sent: { state: "yes", when: "12 Nov" } }],
@@ -311,7 +311,7 @@ test("the first page keeps apart what is to review, where changes are requested 
   assert.deepEqual(groups, [
     ["To review 3", ["#3 In progress", "#4 Changed since your review", "#5 Not opened"]],
     ["Changes requested 1", ["#2 Changes requested"]],
-    ["Agreed 1", ["#1 Agreed"]],
+    ["Accepted 1", ["#1 Accepted"]],
   ]);
   const facts = (n) => new RegExp(`data-number="${n}".*?<p class="facts">(.*?)</p>`).exec(html)[1].replace(/<\/span>/g, " | ").replace(/<[^>]+>/g, "");
   assert.equal(facts(1), "3 of 3 decided | Review copied 12 Nov | ");

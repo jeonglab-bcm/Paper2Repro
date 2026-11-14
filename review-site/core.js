@@ -523,7 +523,7 @@ function whyHtml(ctx, folder, unit) {
 }
 /**
  * The reviewer's decisions at a glance, apart by how they stand: what is not decided, what the
- * reviewer wants changed, and what is agreed. Each name goes to its figure or table.
+ * reviewer wants changed, and what is accepted. Each name goes to its figure or table.
  * units: [{key, title, given, givenText}] in the order of the page; said(key) gives {v, note}.
  */
 export function mapHtml(units, said, foot = "") {
@@ -537,14 +537,14 @@ export function mapHtml(units, said, foot = "") {
     rows[how === "change" || how === "open" ? how : "same"].push(`<button type="button" class="mchip" data-key="${esc(u.key)}">${text}</button>`);
   }
   const row = (cls, title, chips) => (chips.length ? `<div class="mrow m-${cls}"><span class="mname">${title} <b>${chips.length}</b></span><span class="mchips">${chips.join("")}</span></div>` : "");
-  return '<h3 class="mhead">Your review</h3>' + row("open", "Not decided", rows.open) + row("change", "To change", rows.change) + row("same", "Agreed", rows.same) +
+  return '<h3 class="mhead">Your review</h3>' + row("open", "Not decided", rows.open) + row("change", "To change", rows.change) + row("same", "Accepted", rows.same) +
     (foot ? `<p class="mfoot">${esc(foot)}</p>` : "");
 }
 const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author" hidden></textarea>';
 /**
  * The decision that sits right below a figure or a table. One click passes what the reviewer
- * agrees with: Agree (the pull request's verdict stands), or OK where there is no verdict.
- * Disagree opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
+ * agrees with: Accept (the pull request's verdict stands), or OK where there is no verdict.
+ * Reject opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
  * details come last.
  */
 function boxHtml(unit, details = "") {
@@ -552,7 +552,7 @@ function boxHtml(unit, details = "") {
   if (unit.ask === "verdict") {
     const others = ["agrees", "partly", "differs"].filter((v) => v !== unit.given);
     ask = `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}.</span>` +
-      '<span class="opts"><button type="button" data-v="same">Agree</button><button type="button" class="differ">Disagree</button></span>';
+      '<span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Reject</button></span>';
     mine = `<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts">${others.map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span></div>`;
   } else {
     ask = '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
@@ -765,12 +765,12 @@ export function reviewHtml(review, ctx) {
   const chips = (review.draft ? '<span class="chip">draft</span>' : "") + '<span class="ci"></span>';
   const html = `<header class="top"><div class="wrap"><a class="back" href="./">All reviews</a><span class="refline">${esc(review.repo)} · ${bits.join(" · ")} ${chips}</span></div></header>` +
     `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${shared.length ? "" : notes}${code}</section>` +
-    '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Agree with the pull request on these</button></div></main>' +
+    '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Accept these as the pull request says</button></div></main>' +
     '<div class="deckbar"><button type="button" class="dprev" aria-label="Previous card">‹</button><span class="dtitle"></span><span class="dcount"></span>' +
     '<button type="button" class="dnext" aria-label="Next card">›</button><button type="button" class="linkish dpage">Whole page</button><span class="dprog"><i></i></span></div>' +
     `<div class="deckend" hidden><div><p class="dhead">That was the last card</p><p class="dsum"></p>${MAP_SLOT}` +
     '<p><button type="button" class="btn dfirst">Go to the first one not decided</button></p>' +
-    '<p><button type="button" class="btn rest">Agree with the pull request on these</button></p>' +
+    '<p><button type="button" class="btn rest">Accept these as the pull request says</button></p>' +
     `<p><button type="button" class="copy">Copy review</button> <a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></p></div></div>` +
     '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided<span class="chg"></span></span>' +
     '<button type="button" class="btn next">Next not decided</button><button type="button" class="btn dcards">Cards</button><span class="grow"></span>' +
@@ -780,10 +780,10 @@ export function reviewHtml(review, ctx) {
   return { html, summary: { papers: summaries, units, keys: units.map((u) => u.key), files: review.files.length, lines, sha: review.sha } };
 }
 
-const HOME_GROUPS = [["todo", "To review"], ["changes", "Changes requested"], ["agreed", "Agreed"]];
+const HOME_GROUPS = [["todo", "To review"], ["changes", "Changes requested"], ["agreed", "Accepted"]];
 const STATE = { // state of standing(): [the group it is listed in, its name on the card]
   new: ["todo", "Not opened"], seen: ["todo", "Not started"], started: ["todo", "In progress"], updated: ["todo", "Changed since your review"],
-  changes: ["changes", "Changes requested"], agreed: ["agreed", "Agreed"], reviewed: ["agreed", "Reviewed"],
+  changes: ["changes", "Changes requested"], agreed: ["agreed", "Accepted"], reviewed: ["agreed", "Reviewed"],
 };
 /** What a card of the first page says of the reviewer's own decisions. */
 function standingFacts(st) {
@@ -802,7 +802,7 @@ function standingFacts(st) {
 }
 /**
  * The open pull requests, apart by where each stands for this reviewer: to review, changes
- * requested, agreed. mine: number → standing(), with sent {state, when} and again where known.
+ * requested, accepted. mine: number → standing(), with sent {state, when} and again where known.
  */
 export function pullsHtml(repo, pulls, mine = new Map()) {
   const [owner, name] = repo.split("/");

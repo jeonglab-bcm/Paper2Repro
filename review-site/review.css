@@ -453,7 +453,7 @@ body.deck .deckend:not([hidden]) { display: flex; position: fixed; top: 56px; le
 .station[data-mine="same"], .nblock[data-mine="same"] { border-left-color: var(--ours); }
 .station[data-mine="change"], .nblock[data-mine="change"] { border-left-color: var(--accent); }
 .shead::after, .nblock > .irow > .ihead::after { content: "Not decided"; margin-left: auto; font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--v-incon); color: var(--muted); white-space: nowrap; }
-[data-mine="same"] > .shead::after, .nblock[data-mine="same"] > .irow > .ihead::after { content: "Agreed"; box-shadow: none; background: var(--ours-soft); color: var(--ours); }
+[data-mine="same"] > .shead::after, .nblock[data-mine="same"] > .irow > .ihead::after { content: "Accepted"; box-shadow: none; background: var(--ours-soft); color: var(--ours); }
 [data-mine="change"] > .shead::after, .nblock[data-mine="change"] > .irow > .ihead::after { content: "To change"; box-shadow: none; background: var(--accent-soft); color: var(--accent); }
 .dbox[data-same="true"] { background: var(--ours-soft); border-color: transparent; border-left-color: var(--ours); }
 .dbox[data-same="false"]:not([data-v=""]) { background: var(--accent-soft); border-color: transparent; border-left-color: var(--accent); }
@@ -467,7 +467,7 @@ body.deck .deckend > div { width: 100%; margin: auto 0; }
 .stale .btn { min-height: 32px; background: var(--bg); color: var(--ink); border-color: var(--bg); }
 .stale .later { color: inherit; opacity: .8; min-height: 32px; padding: 0 4px; }
 
-/* a decision: Agree passes it; Disagree opens the reviewer's own verdict and the reason */
+/* a decision: Accept passes it; Reject opens the reviewer's own verdict and the reason */
 .decide .mine { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .decide button[data-v="same"][aria-pressed="true"] { background: var(--ours); border-color: var(--ours); color: #fff; }
 .decide .differ[aria-pressed="true"], .decide .mine button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }

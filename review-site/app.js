@@ -382,21 +382,21 @@ function wireReview(review, c, summary) {
     const block = box.closest(".station, .nblock, .outside");
     if (block) block.dataset.mine = !s.v ? "" : agreesWithPr(box, s.v) ? "same" : "change";
     const same = !!s.v && agreesWithPr(box, s.v), change = !!s.v && !same;
-    // Disagree is open while the reviewer picks a verdict of their own, and stays open once there is one
+    // Reject is open while the reviewer picks a verdict of their own, and stays open once there is one
     const differs = box.dataset.ask === "verdict" && (change || box.dataset.open === "1");
     box.querySelectorAll(".decide [data-v]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === "same" ? same : b.dataset.v === s.v)));
     box.querySelector(".differ")?.setAttribute("aria-pressed", String(differs));
     const panel = box.querySelector(".mine");
     if (panel) panel.hidden = !differs;
-    // the reason shows where the reviewer disagrees; a comment on what is agreed is one click away
+    // the reason shows where the reviewer rejects; a comment on what is accepted is one click away
     const ta = box.querySelector("textarea"), noted = differs || change || !!s.note || box.dataset.note === "1";
     ta.hidden = !noted;
     ta.placeholder = differs || change ? "Why? For the author" : "Comment for the author";
     box.querySelector(".addnote").hidden = !(same && !noted);
     if (document.activeElement !== ta) ta.value = s.note;
     if (noted && ta.value) grow(ta);
-    box.querySelector(".state").textContent = !s.v ? "" : s.v === "pr" ? "You agree with the pull request" : box.dataset.ask === "ok" ? LABEL[s.v]
-      : agreesWithPr(box, s.v) ? `You agree: ${LABEL[s.v]}` : `You say: ${LABEL[s.v]}`;
+    box.querySelector(".state").textContent = !s.v ? "" : s.v === "pr" ? "You accept what the pull request says" : box.dataset.ask === "ok" ? LABEL[s.v]
+      : agreesWithPr(box, s.v) ? `You accept: ${LABEL[s.v]}` : `You say: ${LABEL[s.v]}`;
   };
   const rest = app.querySelector(".restbar");
   // the decisions at a glance, apart by how they stand; a name goes to its figure or table
@@ -434,7 +434,7 @@ function wireReview(review, c, summary) {
     };
     box.querySelectorAll(".decide [data-v]").forEach((b) => b.addEventListener("click", () => {
       const s = said(repo, box.dataset.key), inPanel = !!b.closest(".mine");
-      // Agree: the pull request's own verdict where it gives one. A second click takes a decision back.
+      // Accept: the pull request's own verdict where it gives one. A second click takes a decision back.
       const v = b.dataset.v !== "same" ? b.dataset.v : ["agrees", "partly", "differs"].includes(box.dataset.given) ? box.dataset.given : "pr";
       const on = b.getAttribute("aria-pressed") === "true";
       decide(on ? "" : v, inPanel);
@@ -442,7 +442,7 @@ function wireReview(review, c, summary) {
       if (!on && (inPanel || v === "no") && window.matchMedia("(pointer: fine)").matches) box.querySelector("textarea").focus({ preventScroll: true });
       passOn(box);
     }));
-    // Disagree: the reviewer's own verdict and the reason show; what was agreed is taken back
+    // Reject: the reviewer's own verdict and the reason show; what was accepted is taken back
     box.querySelector(".differ")?.addEventListener("click", (ev) => decide("", ev.currentTarget.getAttribute("aria-pressed") !== "true"));
     box.querySelector(".addnote").addEventListener("click", () => {
       box.dataset.note = "1";
@@ -458,8 +458,8 @@ function wireReview(review, c, summary) {
       paintMap();
     });
   });
-  // What is agreed is passed: on a card the next card comes, on the page the next figure or table
-  // that is not decided comes to the top. A disagreement stays, for its verdict and reason.
+  // What is accepted is passed: on a card the next card comes, on the page the next figure or table
+  // that is not decided comes to the top. What is rejected stays, for its verdict and reason.
   const passOn = (box) => {
     if (deck.on) return deck.decided(box);
     const s = said(repo, box.dataset.key);
@@ -560,7 +560,7 @@ function wireReview(review, c, summary) {
     ev.preventDefault();
   };
 
-  // the review as text for GitHub: what to change first, what is agreed last
+  // the review as text for GitHub: what to change first, what is accepted last
   const reviewText = () => {
     const paper = summary.papers.map((p) => p.id).filter(Boolean).join(", ") || review.label;
     const out = [`### Review of ${paper} at ${review.sha.slice(0, 7)} (${review.label})`, ""];
@@ -574,10 +574,10 @@ function wireReview(review, c, summary) {
       else if (note) noted.push(`- ${title}${given ? ` (${given})` : ""}: ${note}`);
       else fine.push(x.dataset.title + (given ? ` (${given})` : ""));
     }
-    for (const [title, rows] of [["Verdicts to change", change], ["Not OK", notOk], ["Agreed, with a comment", noted]]) {
+    for (const [title, rows] of [["Verdicts to change", change], ["Not OK", notOk], ["Accepted, with a comment", noted]]) {
       if (rows.length) out.push(`**${title} (${rows.length})**`, ...rows, "");
     }
-    if (fine.length) out.push(`**Agreed (${fine.length}):** ${fine.join("; ")}`, "");
+    if (fine.length) out.push(`**Accepted (${fine.length}):** ${fine.join("; ")}`, "");
     if (undecided.length) out.push(`**Not decided (${undecided.length})**`, ...undecided, "");
     out.push(`_From the review page: ${location.href.split("#")[0]}_`);
     return out.join("\n");
