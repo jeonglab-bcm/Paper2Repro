@@ -65,7 +65,10 @@ const home = async (page, base) => { await page.goto(base); await page.waitForSe
 async function small(browser, base) {
   const repo = makeRepo();
   const mock = makeMock({ clone: repo.clone, owner: "o", repo: "r", pulls: repo.pulls, branches: repo.branches });
-  const page = await open(browser, mock);
+  // the same repository as o/r2, where the paper is already in and pull request 9 changes it: its base is the paper's commit
+  const paper = require("child_process").execFileSync("git", ["-C", repo.clone, "rev-parse", "origin/paper"]).toString().trim();
+  const later = makeMock({ clone: repo.clone, owner: "o", repo: "r2", base: paper, pulls: [{ number: 9, title: "PMC1: more", user: { login: "someone" }, head: { ref: "paper" }, updated_at: "2026-11-12T00:00:00Z", git: "origin/paper" }] });
+  const page = await open(browser, { handle: (route) => (route.request().url().includes("/o/r2/") ? later : mock).handle(route) });
   const step = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (err) { console.log("FAIL", name); throw err; } };
 
   await step("the first page has a box for a link and lists what is open", async () => {
@@ -317,6 +320,18 @@ async function small(browser, base) {
     assert.equal(await page.locator(".bar .done").textContent(), "5");
     await home(page, base);
     assert.deepEqual(await groupsOf(page), [["Accepted 1", ["#7 Accepted"]]]);
+  });
+
+  await step("a change to a paper that is already in the repository still shows the original", async () => {
+    // the change holds two new files and no picture: the published figure is read from the paper's folder
+    const calls = later.state.calls;
+    await page.goto(base + "?r=o/r2/pull/9");
+    await page.waitForSelector(".dbox");
+    assert.deepEqual(await page.locator('details.file').evaluateAll((ds) => ds.map((d) => d.dataset.path.split("/").pop())), ["more1.py", "more2.py"]);
+    assert.deepEqual(await page.locator("#fig-1 .viewer figure:visible figcaption").allTextContents(), ["Original", "Ours", "Overlap"]);
+    assert.deepEqual(await picturesLoaded(page), { all: 3, ok: 3 });
+    assert.equal(later.state.calls - calls, 4); // the pull request, its files, the folder of published figures, the checks
+    await home(page, base);
   });
 
   await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {
