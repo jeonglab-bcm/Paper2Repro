@@ -148,10 +148,17 @@ async function loadReview(link) {
       if (!results) continue;
       const baseText = baseSha ? await rawText({ owner, repo, sha: baseSha }, path) : null;
       let mine = tree.filter((p) => p.startsWith(folder + "/"));
-      if (!mine.some((p) => p.includes("/published/"))) {
-        // a change to a paper that is already in the repository: its published figures are not in the change
-        const dir = await api(`${base}/contents/${core.encPath(folder)}/figure-reproduction/published?ref=${review.sha}`).catch(() => []);
-        mine = mine.concat((Array.isArray(dir) ? dir : []).map((d) => d.path));
+      // A change holds only the files it touches. A change to a paper that is already in the repository does not
+      // hold its published figures, or holds some of them: where a figure has none, the folders are read.
+      const listed = async (dir) => {
+        const list = await api(`${base}/contents/${core.encPath(dir)}?ref=${review.sha}`).catch(() => []);
+        return (Array.isArray(list) ? list : []).map((d) => d.path);
+      };
+      if ((baseText || !mine.some((p) => p.includes("/published/"))) && core.withoutOriginal(folder, results, mine).any) {
+        mine = mine.concat(await listed(`${folder}/figure-reproduction/published`));
+        // some papers keep the published picture next to ours, as fig1_published.png
+        const lone = baseText ? core.withoutOriginal(folder, results, mine).ours[0] : null;
+        if (lone) mine = mine.concat(await listed(lone.slice(0, lone.lastIndexOf("/"))));
       }
       review.papers.push({ folder, path, results, baseResults: baseText ? core.parseResults(baseText) : null, tree: mine });
       break;

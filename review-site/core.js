@@ -336,16 +336,29 @@ export function paperCandidates(files) {
   return tops;
 }
 
+/**
+ * The figure a picture shows, from its file name: "1", "2a", "s3"; null when the name does not
+ * say. Papers name the published pictures in several ways: figure-1.png, fig2a.jpg,
+ * fig1_published.png, and as the journal does (pcbi.1000660.g001.png, elife-12345-fig2-v1.jpg).
+ */
+export function figureKeyOf(path) {
+  const stem = String(path).split("/").pop().replace(/\.[^.]+$/, "").toLowerCase();
+  const m = /^fig(?:ure)?[-_. ]?(s?)0*(\d+)([a-z]*)(?:[-_. ](?:published|ours|overlay))?$/.exec(stem) ||
+    /(?:^|[-_. ])(?:fig(?:ure)?|g|f)[-_. ]?(s?)0*(\d+)([a-z]?)(?:[-_. ](?:v\d+|html|large|hires|orig(?:inal)?|published))*$/.exec(stem);
+  return m ? m[1] + m[2] + m[3] : null;
+}
+/** Whether a path is a picture of the paper's own figure: in a published/ folder, or named fig1_published.png next to ours. */
+const isPublished = (p) => RASTER.has(ext(p)) && (p.includes("/published/") || /[-_.]published\.[A-Za-z]+$/.test(p));
+
 /** Figure items grouped by figure number, each with its published picture and our renders (as paths). */
 export function figureStations(folder, items, tree) {
-  const published = tree.filter((p) => p.includes("/published/") && RASTER.has(ext(p)));
+  // a published/ folder first: it is where the paper's own figures belong
+  const published = tree.filter(isPublished).map((p) => [figureKeyOf(p), p]).filter(([k]) => k !== null)
+    .sort((x, y) => Number(y[1].includes("/published/")) - Number(x[1].includes("/published/")));
   const findPublished = (stemKey) => {
     for (const key of [stemKey, stemKey.replace(/[a-z]+$/, "")]) {
-      for (const p of published) {
-        const stem = p.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase();
-        const m = /^fig(?:ure)?[-_. ]?(s?\d+[a-z]*)$/.exec(stem);
-        if (m && m[1] === key) return p;
-      }
+      const hit = published.find(([k]) => k === key);
+      if (hit) return hit[1];
     }
     return null;
   };
@@ -363,12 +376,22 @@ export function figureStations(folder, items, tree) {
       if (st.renders.some((r) => r.oursRel === o)) continue;
       const stem = o.split("/").pop().replace(/\.[^.]+$/, "").replace(/_ours$/, "");
       const overlay = outs.find((x) => x.split("/").pop().startsWith(stem + "_overlay"));
-      const m = /^fig(?:ure)?[-_. ]?(s?\d+[a-z]*)/.exec(stem.toLowerCase());
-      st.renders.push({ oursRel: o, label: stem, ours: `${folder}/${o}`, overlay: overlay ? `${folder}/${overlay}` : null, published: m ? findPublished(m[1]) : null });
+      const m = /^fig(?:ure)?[-_. ]?(s?)0*(\d+)([a-z]*)/.exec(stem.toLowerCase());
+      st.renders.push({ oursRel: o, label: stem, ours: `${folder}/${o}`, overlay: overlay ? `${folder}/${overlay}` : null, published: m ? findPublished(m[1] + m[2] + m[3]) : null });
     }
   }
   for (const st of stations.values()) if (!st.renders.length) st.publishedOnly = findPublished(st.key);
   return [...stations.values()];
+}
+/**
+ * What of a paper's figures has no published picture among the paths of tree: `any` when a
+ * figure has none at all, and `ours`, our pictures that have nothing to stand next to.
+ */
+export function withoutOriginal(folder, results, tree) {
+  const items = (results.items || []).filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
+  const stations = figureStations(folder, items, tree);
+  const ours = stations.flatMap((st) => st.renders.filter((r) => !r.published).map((r) => r.ours));
+  return { any: ours.length > 0 || stations.some((st) => !st.renders.length && !st.publishedOnly), ours };
 }
 
 // ----------------------------------------------------------------- drawing

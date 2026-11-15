@@ -120,6 +120,12 @@ the pictures and the code. There is no server and no build for each pull request
 - **Private repositories** need that token. This path is written but not tested.
 - **A branch** shows its first 300 changed files (GitHub's limit for a comparison). A pull
   request shows all of them.
+- **The original of a figure** is a picture in the paper folder that is named for its figure:
+  in `published/` as `figure-1.png`, `fig2a.jpg` or as the journal names it
+  (`pcbi.1000660.g001.png`), or next to ours as `fig1_published.png`. A figure with no such
+  picture shows ours and the overlap only. For a change to a paper that is already in the
+  repository the page reads the folder, as the change does not hold the pictures (1 request,
+  2 when they are next to ours).
 - **Conflicts** are GitHub's: the page says when a pull request conflicts with its base. It
   does not compare open pull requests with each other.
 

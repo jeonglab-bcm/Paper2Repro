@@ -223,6 +223,34 @@ test("a figure shows the original, ours and the overlap at once, each named", ()
   assert.ok(html.includes('<div class="outside">') && html.includes('<div class="ofiles">'));
 });
 
+test("the paper's own figure is found by the ways papers name it", () => {
+  const key = (name) => core.figureKeyOf(`PMC1/figure-reproduction/published/${name}`);
+  assert.deepEqual(["figure-1.png", "fig2a.jpg", "Figure_03.png", "figure-S1.png", "fig1_published.png", "figS2_published.png"].map(key), ["1", "2a", "3", "s1", "1", "s2"]);
+  // as the journal names them
+  assert.deepEqual(["pcbi.1000660.g001.png", "pcbi.1000660.g010.png", "elife-12345-fig2-v1.jpg", "41586_2020_1234_Fig3_HTML.png"].map(key), ["1", "10", "2", "3"]);
+  // a table, a supplement file, a file of values: not a figure
+  assert.deepEqual(["table-1.png", "pcbi.1000660.t001.png", "pcbi.1000660.s001.png", "crops.png"].map(key), [null, null, null, null]);
+
+  const item = (id, stem) => ({ id, label: id, kind: "figure", method: "pixels", verdict: "agrees", outputs: [`figure-reproduction/output/figures/${stem}_ours.png`, `figure-reproduction/output/figures/${stem}_overlay.png`] });
+  const originals = (items, tree) => core.figureStations("PMC1", items, tree).map((st) => st.renders.map((r) => r.published));
+  const out = "PMC1/figure-reproduction/output/figures", pub = "PMC1/figure-reproduction/published";
+  // next to ours, as fig1_published.png (fossil PMC2949886); ours and the overlap are never taken for the original
+  assert.deepEqual(originals([item("fig1.null", "fig1"), item("figS2", "figS2")], [`${out}/fig1_ours.png`, `${out}/fig1_overlay.png`, `${out}/fig1_published.png`, `${out}/figS2_published.png`]),
+    [[`${out}/fig1_published.png`], [`${out}/figS2_published.png`]]);
+  // in published/ under the journal's name (fossil PMC2813257); a panel of ours stands next to its whole figure
+  assert.deepEqual(originals([item("fig2.a", "fig2a"), item("fig3", "fig3")], [`${pub}/pcbi.1000660.g002.png`, `${pub}/pcbi.1000660.g003.png`]),
+    [[`${pub}/pcbi.1000660.g002.png`], [`${pub}/pcbi.1000660.g003.png`]]);
+  // the published/ folder comes first, and a figure of ours drawn from published values is not the paper's figure
+  assert.deepEqual(originals([item("fig1", "fig1")], [`${out}/fig1_published.png`, `${pub}/figure-1.jpg`, `${out}/published-values-figure-1.png`]), [[`${pub}/figure-1.jpg`]]);
+  assert.deepEqual(originals([item("fig1", "fig1")], [`${out}/published-values-figure-1.png`, "PMC1/figure-reproduction/output/compare/figure-1-published-values/overlay.png"]), [[null]]);
+
+  // what has no original yet, so the page knows to read the folders of a paper that is already in the repository
+  const results = { items: [item("fig1", "fig1"), { id: "fig2", kind: "figure", method: "none", verdict: "not_attempted" }] };
+  assert.deepEqual(core.withoutOriginal("PMC1", results, []), { any: true, ours: [`${out}/fig1_ours.png`] });
+  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`]), { any: true, ours: [] }); // Fig. 2 has no picture at all
+  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`, `${pub}/figure-2.png`]), { any: false, ours: [] });
+});
+
 test("only the method and what is shared is shown as code", () => {
   const { html, summary } = core.reviewHtml(review(), ctx);
   assert.match(html, /<details class="file"[^>]*data-path="PMC1\/package\/src\/m\/core.py" data-status="A" open>/);
