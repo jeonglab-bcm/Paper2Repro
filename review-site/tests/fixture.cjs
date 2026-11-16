@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const zlib = require("zlib");
 
-function png(w = 4, h = 3) {
+function png(w = 4, h = 3, shade = 255) {
   const chunk = (kind, data) => {
     const body = Buffer.concat([Buffer.from(kind), data]);
     const len = Buffer.alloc(4), crc = Buffer.alloc(4);
@@ -18,7 +18,7 @@ function png(w = 4, h = 3) {
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
   ihdr.set([8, 2, 0, 0, 0], 8);
-  const raw = Buffer.concat(Array.from({ length: h }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 255)])));
+  const raw = Buffer.concat(Array.from({ length: h }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, shade)])));
   return Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "binary"), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
@@ -83,11 +83,15 @@ function makeRepo() {
   git(up, "checkout", "-q", "main");
   const clone = path.join(dir, "clone");
   execFileSync("git", ["clone", "-q", up, clone], { stdio: "ignore" });
-  // a new commit on the pull request's branch, as its author would push; gives its sha
+  // a new commit on the pull request's branch, as its author would push; gives its sha.
+  // ours: Fig. 1 of ours is drawn again. cause: the explanation of Fig. 1 becomes this text. Otherwise a new file of code.
   let pushes = 0;
-  const push = () => {
+  const push = ({ ours = false, cause = "" } = {}) => {
     git(up, "checkout", "-q", "paper");
-    write(`PMC1/package/src/m/more${++pushes}.py`, "y = 2\n");
+    pushes++;
+    if (ours) write("PMC1/figure-reproduction/output/fig1_ours.png", png(8, 6, 250 - pushes));
+    else if (cause) write("PMC1/results.json", fs.readFileSync(path.join(up, "PMC1/results.json"), "utf8").replace(/"summary":"Our curve[^"]*"/, `"summary":${JSON.stringify(cause)}`));
+    else write(`PMC1/package/src/m/more${pushes}.py`, "y = 2\n");
     git(up, "add", "-A");
     git(up, "commit", "-q", "-m", `more ${pushes}`);
     git(up, "checkout", "-q", "main");

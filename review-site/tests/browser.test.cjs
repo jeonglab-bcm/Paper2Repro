@@ -138,7 +138,10 @@ async function small(browser, base) {
   await step("a verdict of your own and a comment are kept and counted", async () => {
     const fig = page.locator("#fig-1 .dbox"), table = page.locator("#i-table1 + .dbox"), drawing = page.locator("#fig-2 .dbox");
     // a decision is Accept or Revise; the verdicts and the reason come with Revise
-    assert.equal(await fig.locator(".ask").first().textContent(), "The pull request says Partly.");
+    assert.equal(await fig.locator(".ask").first().textContent(), "The pull request says Partly (60% within 2 px, pass 75%).");
+    assert.deepEqual(await fig.locator(".because li").allTextContents(), ["Our curve is lower."]); // why, at the question; the details stay closed
+    assert.equal(await page.locator("#fig-1 .irow").isVisible(), false);
+    assert.equal(await page.locator(".again:visible").count(), 0);
     assert.deepEqual(await fig.locator(".decide button:visible").allTextContents(), ["Accept", "Revise"]);
     assert.equal(await fig.locator("textarea").isVisible(), false);
     await fig.locator(".differ").click();
@@ -334,6 +337,45 @@ async function small(browser, base) {
     await home(page, base);
   });
 
+  await step("what the pull request changed since you decided is said at its figure", async () => {
+    await page.locator(".rcard").click();
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator(".bar .done").textContent(), "5");
+    assert.equal(await page.locator(".again:visible").count(), 0);
+    const seenAt = (await page.locator(".refline").textContent()).match(/[0-9a-f]{7}/)[0];
+    // our Fig. 1 is drawn again, with the same verdict and explanation: the decision stands, and the page says the picture is new
+    repo.push({ ours: true });
+    await page.goto(base + "?r=o/r/pull/7");
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator("#fig-1 .again").textContent(), `Drawn again since you decided, at ${seenAt}. Your decision is kept. Seen`);
+    assert.equal(await page.locator(".again:visible").count(), 1);
+    assert.deepEqual([await page.locator("#fig-1 .dbox .state").textContent(), await page.locator(".bar .done").textContent()], ["You accept: Partly", "5"]);
+    assert.match((await page.locator(".phead .rmap .m-same .mchip").allTextContents()).join(" | "), /Fig\. 1 with a comment drawn again/);
+    await page.locator("#fig-1 .again .seen").click();
+    assert.equal(await page.locator(".again:visible").count(), 0);
+    await page.reload();
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator(".again:visible").count(), 0);
+    // the explanation of Fig. 1 changes: it asks again, and says what was decided before
+    const decidedAt = (await page.locator(".refline").textContent()).match(/[0-9a-f]{7}/)[0];
+    repo.push({ cause: "Our curve is lower after the redraw. Fig. 3 shows it too." });
+    await page.goto(base + "?r=o/r/pull/7");
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator("#fig-1 .again").textContent(), `Changed since you decided, at ${decidedAt}. Then the pull request said Partly and you accepted it: “The curve agrees within noise.”. It asks again.`);
+    assert.deepEqual([await page.locator("#fig-1").getAttribute("data-mine"), await page.locator(".bar .done").textContent()], ["again", "4"]);
+    assert.deepEqual(await page.locator(".phead .rmap .m-open .mchip").allTextContents(), ["Fig. 1 changed since you decided"]);
+    assert.deepEqual(await page.locator("#fig-1 .because li").allTextContents(), ["Our curve is lower after the redraw."]);
+    await page.reload(); // it is said until it is decided again
+    await page.waitForSelector(".dbox");
+    assert.equal(await page.locator("#fig-1 .again").isVisible(), true);
+    await page.locator('#fig-1 .dbox button[data-v="same"]').click();
+    assert.equal(await page.locator(".again:visible").count(), 0);
+    await page.reload();
+    await page.waitForSelector(".dbox");
+    assert.deepEqual([await page.locator(".again:visible").count(), await page.locator(".bar .done").textContent()], [0, "5"]);
+    await home(page, base);
+  });
+
   await step("a figure shows the original, ours and the overlap at once; other views are a click away", async () => {
     await page.locator(".rcard").click();
     await page.waitForSelector(".viewer");
@@ -353,6 +395,24 @@ async function small(browser, base) {
     assert.equal(await v.locator(".pub").isVisible(), false);
     await v.locator('.modes button[data-m="side"]').click();
     assert.equal(await v.locator("figure:visible").count(), 3);
+    // a click on a picture opens it large, alone; a click on the large one shows the next, and its name says which
+    const small = (await v.locator(".ours img").boundingBox()).width;
+    await v.locator(".ours img").click();
+    assert.equal(await v.getAttribute("data-mode"), "ours");
+    assert.deepEqual(await v.locator("figure:visible figcaption").allTextContents(), ["Ours"]);
+    assert.equal(await v.locator('.modes button[aria-pressed="true"]').textContent(), "Ours");
+    await v.locator(".stage").click();
+    assert.deepEqual([await v.getAttribute("data-mode"), await v.locator("figure:visible figcaption").allTextContents()], ["overlay", ["Overlap"]]);
+    await v.locator(".stage").click();
+    assert.equal(await v.getAttribute("data-mode"), "pub");
+    await v.locator('.modes button[data-m="side"]').click();
+    assert.equal(await v.locator("figure:visible").count(), 3);
+    // large is larger than side by side, within the window; the page knows the picture's own size for that
+    await v.locator(".ours img").click();
+    const large = await v.locator(".ours img").boundingBox();
+    assert.ok(large.width > small && large.height <= 1000 * 0.83, JSON.stringify([small, large]));
+    assert.deepEqual(await v.locator(".stage").evaluate((el) => [el.style.getPropertyValue("--nw"), el.style.getPropertyValue("--fit")]), ["8px", "calc(82vh * 1.3333)"]);
+    await v.locator('.modes button[data-m="side"]').click();
   });
 
   await step("a link pasted anywhere on the first page opens at once", async () => {

@@ -21,13 +21,14 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
     const st = git(clone, ["diff", "--name-status", "--no-renames", "-z", baseSha, headSha]).split("\0");
     const status = new Map();
     for (let i = 0; i + 1 < st.length; i += 2) status.set(st[i + 1], st[i]);
+    const blobs = new Map(git(clone, ["ls-tree", "-r", "-z", headSha]).split("\0").filter(Boolean).map((ln) => { const [meta, name] = ln.split("\t"); return [name, meta.split(" ")[2]]; }));
     const out = [];
     for (const rec of git(clone, ["diff", "--numstat", "--no-renames", "-z", baseSha, headSha]).split("\0")) {
       if (!rec) continue;
       const [a, d, ...rest] = rec.split("\t");
       const filename = rest.join("\t"), binary = a === "-";
       const f = {
-        filename, status: { A: "added", D: "removed" }[status.get(filename)] || "modified",
+        filename, sha: blobs.get(filename) || "", status: { A: "added", D: "removed" }[status.get(filename)] || "modified",
         additions: binary ? 0 : Number(a), deletions: binary ? 0 : Number(d), changes: binary ? 0 : Number(a) + Number(d),
       };
       if (!binary && f.changes <= 3000) {

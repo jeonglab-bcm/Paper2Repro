@@ -160,6 +160,11 @@ async function loadReview(link) {
         const lone = baseText ? core.withoutOriginal(folder, results, mine).ours[0] : null;
         if (lone) mine = mine.concat(await listed(lone.slice(0, lone.lastIndexOf("/"))));
       }
+      // and its results may list no picture of ours: those are found by name, in the folders they are written to
+      for (const dir of baseText ? ["figure-reproduction/output/figures", "figure-reproduction/output"] : []) {
+        if (!core.withoutOriginal(folder, results, mine).undrawn) break;
+        mine = mine.concat(await listed(`${folder}/${dir}`));
+      }
       review.papers.push({ folder, path, results, baseResults: baseText ? core.parseResults(baseText) : null, tree: mine });
       break;
     }
@@ -243,8 +248,8 @@ async function render() {
     document.title = `${summary.papers.map((p) => p.id).filter(Boolean).join(" ") || review.label} · ${review.label}`;
     const route = core.routeOf(review.number ? { ...link, kind: "pull", number: review.number } : { ...link, branch: review.branch });
     if (route !== location.search) { history.replaceState({}, "", route + location.hash); shown = location.search; }
+    summary.units = remember(review, route, summary);
     wireReview(review, c, summary);
-    remember(review, route, summary);
     const repoPath = `/repos/${c.owner}/${c.repo}`;
     showing({
       link, sha: review.sha,
@@ -268,12 +273,32 @@ function sentOf(repo, label, keys) {
   return { state: sent.sig === core.reviewSig(keys, (k) => said(repo, k)) ? "yes" : "stale", when };
 }
 
+/**
+ * Keeps what this review asks, and gives its units with what changed since the reviewer decided:
+ * `before` on a figure or table that the pull request changed after a decision (it asks again),
+ * and `redrawn` on one whose pictures were drawn again while the decision still stands.
+ */
 function remember(review, route, summary) {
-  store.set(sumKey(review.repo, review.label), { sha: review.sha, keys: summary.keys, units: summary.units });
+  const key = sumKey(review.repo, review.label), old = store.get(key);
+  const was = new Map(((old && old.units) || []).map((u) => [u.title, u]));
+  const units = summary.units.map((u) => {
+    const w = was.get(u.title);
+    if (!w) return u;
+    const now = said(review.repo, u.key);
+    if (w.key === u.key) {
+      const redrawn = w.pics && u.pics && w.pics !== u.pics && now.v ? { sha: old.sha } : w.redrawn;
+      return { ...u, ...(w.before && !now.v ? { before: w.before } : {}), ...(redrawn && now.v ? { redrawn } : {}) };
+    }
+    const then = said(review.repo, w.key);
+    if (then.v || then.note) return { ...u, before: { v: then.v, note: then.note, given: w.given, givenText: w.givenText, sha: old.sha } };
+    return w.before && !now.v ? { ...u, before: w.before } : u;
+  });
+  store.set(key, { sha: review.sha, keys: summary.keys, units });
   const label = `${review.repo} ${review.label}` + (summary.papers[0] && summary.papers[0].id ? ` · ${summary.papers[0].id}` : "");
   const recent = (store.get("rv:recent") || []).filter((r) => r.route !== route);
   recent.unshift({ route, label });
   store.set("rv:recent", recent.slice(0, 8));
+  return units;
 }
 
 const homeResults = new Map(); // "owner/repo@sha" → {folder, results} or null: the results.json of a pull request of the first page
@@ -382,12 +407,34 @@ function wireReview(review, c, summary) {
   const boxes = [...app.querySelectorAll(".dbox")];
   const grow = (ta) => { ta.style.height = "auto"; ta.style.height = Math.max(36, ta.scrollHeight + 2) + "px"; };
   const open = () => boxes.filter((x) => !said(repo, x.dataset.key).v);
+  const unitOf = (box) => summary.units.find((u) => u.key === box.dataset.key) || {};
+  const saveUnits = () => store.set(sumKey(repo, review.label), { sha: review.sha, keys: summary.keys, units: summary.units });
+  // what the pull request changed since the reviewer decided: said above the question, until it is decided again or seen
+  const paintAgain = (box, s) => {
+    const u = unitOf(box), line = box.querySelector(".again"), b = u.before;
+    line.textContent = "";
+    if (b && !s.v) {
+      const did = !b.v ? "you left a comment" : core.standOf({ given: b.given }, b.v) === "same" ? "you accepted it" : `you said ${LABEL[b.v]}`;
+      line.textContent = `Changed since you decided, at ${String(b.sha || "").slice(0, 7)}. Then ${b.givenText ? `the pull request said ${b.givenText} and ` : ""}${did}${b.note ? `: “${b.note}”` : ""}. It asks again.`;
+    } else if (u.redrawn && s.v) {
+      line.textContent = `Drawn again since you decided, at ${String(u.redrawn.sha || "").slice(0, 7)}. Your decision is kept. `;
+      const seen = document.createElement("button");
+      seen.type = "button";
+      seen.className = "linkish seen";
+      seen.textContent = "Seen";
+      seen.addEventListener("click", () => { delete u.redrawn; saveUnits(); paint(box); paintMap(); });
+      line.append(seen);
+    }
+    line.hidden = !line.textContent;
+    return !line.hidden;
+  };
   const paint = (box) => {
     const s = said(repo, box.dataset.key);
     box.dataset.v = s.v;
     box.dataset.same = String(agreesWithPr(box, s.v));
+    const again = paintAgain(box, s);
     const block = box.closest(".station, .nblock, .outside");
-    if (block) block.dataset.mine = !s.v ? "" : agreesWithPr(box, s.v) ? "same" : "change";
+    if (block) block.dataset.mine = !s.v ? (again ? "again" : "") : agreesWithPr(box, s.v) ? "same" : "change";
     const same = !!s.v && agreesWithPr(box, s.v), change = !!s.v && !same;
     // Revise is open while the reviewer picks a verdict of their own, and stays open once there is one
     const differs = box.dataset.ask === "verdict" && (change || box.dataset.open === "1");
@@ -435,6 +482,8 @@ function wireReview(review, c, summary) {
     paint(box);
     const decide = (v, opened) => {
       box.dataset.open = opened ? "1" : "";
+      const u = unitOf(box);
+      if (v && u.redrawn) { delete u.redrawn; saveUnits(); } // looked at again
       store.set(dkey(repo, box.dataset.key), { ...said(repo, box.dataset.key), v });
       paint(box);
       progress();
@@ -525,7 +574,7 @@ function wireReview(review, c, summary) {
       if (!card) return;
       card.querySelectorAll(".views, .irow, .ofiles").forEach((x) => { x.scrollTop = 0; });
       // one picture at a time: the overlap first, as it shows both
-      card.querySelectorAll(".viewer").forEach((v) => { if (!["pub", "ours", "overlay"].includes(v.dataset.mode)) v.setMode(v.querySelector('.pick [data-m="overlay"]') ? "overlay" : v.querySelector(".pick button")?.dataset.m || "side"); });
+      card.querySelectorAll(".viewer").forEach((v) => { if (!["pub", "ours", "overlay"].includes(v.dataset.mode)) v.setMode(v.querySelector('.pick [data-m="overlay"]') ? "overlay" : v.querySelector(".pick button")?.dataset.m || "ours"); });
     },
     enter() {
       this.on = true;
@@ -624,15 +673,28 @@ function wireReview(review, c, summary) {
     };
     v.querySelectorAll(".modes button, .pick button").forEach((b) => b.addEventListener("click", () => v.setMode(b.dataset.m)));
     if (range) range.addEventListener("input", () => stage.style.setProperty("--cut", range.value + "%"));
+    // the pictures there are, each of which can show alone and large: original, ours, overlap
+    const singles = [["pub", ".pub"], ["ours", ".ours"], ["overlay", ".ovl"]].filter(([, cls]) => stage.querySelector(`figure${cls}`)).map(([m]) => m);
     stage.addEventListener("click", (ev) => {
-      if (v.dataset.mode === "blink" && ev.target !== range) v.classList.toggle("b");
-      if (!document.body.classList.contains("deck")) return;
-      // on a card, a tap on the picture shows the next one: original, ours, overlap
-      const names = [...v.querySelectorAll(".pick button")].map((x) => x.dataset.m), at = names.indexOf(v.dataset.mode);
-      if (at !== -1) v.setMode(names[(at + 1) % names.length]);
+      if (ev.target === range || v.dataset.mode === "swipe") return;
+      if (v.dataset.mode === "blink") return void v.classList.toggle("b");
+      const at = singles.indexOf(v.dataset.mode);
+      // a large picture (and a card's picture): a click shows the next one, so two can be told apart in place
+      if (at !== -1) return void v.setMode(singles.length > 1 ? singles[(at + 1) % singles.length] : document.body.classList.contains("deck") ? singles[0] : "side");
+      // side by side: the picture that is clicked opens large
+      const fig = ev.target.closest("figure");
+      if (!fig || document.body.classList.contains("deck")) return;
+      v.setMode(fig.classList.contains("pub") ? "pub" : fig.classList.contains("ovl") ? "overlay" : "ours");
+      v.scrollIntoView({ block: "nearest" });
     });
     const first = stage.querySelector("img");
-    const size = () => { if (first.naturalWidth) stage.style.setProperty("--ar", `${first.naturalWidth} / ${first.naturalHeight}`); };
+    const size = () => {
+      if (!first.naturalWidth) return;
+      stage.style.setProperty("--ar", `${first.naturalWidth} / ${first.naturalHeight}`);
+      const wide = first.naturalWidth / first.naturalHeight;
+      stage.style.setProperty("--nw", `${first.naturalWidth}px`);
+      stage.style.setProperty("--fit", wide >= 1 ? `calc(82vh * ${wide.toFixed(4)})` : "100%"); // a wide picture, large, fits the window
+    };
     first.addEventListener("load", size);
     size();
   });

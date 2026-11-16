@@ -474,3 +474,25 @@ body.deck .deckend > div { width: 100%; margin: auto 0; }
 .decide .addnote { min-height: 0; padding: 0; border: 0; background: none; font-weight: 400; font-size: 13px; }
 .station, .nblock, .outside { scroll-margin-top: 8px; }
 body.deck .dbox .decide .mine .opts { flex: 1 1 100%; }
+
+/* one picture large: as wide as its block lets it, and not larger than it is. A wide picture also fits the
+   height of the window, so two can be told apart in place; a tall one keeps its width and scrolls. */
+.viewer:not([data-mode="side"]) { max-width: none; }
+.viewer:not([data-mode="side"]) .stage { max-width: min(100%, max(360px, var(--nw, 100%)), var(--fit, 100%)); }
+.viewer[data-mode="pub"] .ours, .viewer[data-mode="pub"] .ovl, .viewer[data-mode="ours"] .pub { display: none; }
+.viewer[data-mode="side"] .stage figure { cursor: zoom-in; }
+.viewer[data-mode="pub"] .stage, .viewer[data-mode="ours"] .stage, .viewer[data-mode="overlay"] .stage, .viewer[data-mode="blink"] .stage { cursor: pointer; }
+.stage .ovl figcaption { background: #4b47c9; }
+.modes { flex-wrap: wrap; }
+.note.found { font-size: 13px; }
+
+/* at the question: what was measured, why the result is not a plain match, and what changed since the reviewer decided */
+.ask .meas { font-size: inherit; }
+.because { flex: 1 1 100%; display: grid; gap: 4px; margin: 0; font-size: 14px; max-width: 92ch; }
+.because b { font-weight: 600; }
+.because .rest { color: var(--muted); font-size: 13px; }
+.dbox .again { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--accent); overflow-wrap: anywhere; }
+.dbox .again .seen { color: inherit; font-weight: 600; }
+[data-mine="again"] > .shead::after, .nblock[data-mine="again"] > .irow > .ihead::after { content: "Changed, decide again"; box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); }
+.station[data-mine="again"], .nblock[data-mine="again"] { border-left-color: var(--accent); }
+.mchip .pen.new { opacity: 1; font-weight: 600; color: var(--accent); }

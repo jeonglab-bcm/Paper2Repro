@@ -164,13 +164,20 @@ test("each figure and each table has its decision right below it", () => {
   assert.equal((fig1.match(/<div class="dbox"/g) || []).length, 1);
   assert.ok(fig1.includes('data-title="Fig. 1" data-ask="verdict" data-given="partly" data-given-text="Partly"'));
   // one click accepts; Revise opens the reviewer's own verdict (not the pull request's again) and the reason
-  assert.ok(fig1.includes('<span class="ask">The pull request says <b>Partly</b>.</span><span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Revise</button></span>'));
+  // the question says what was measured and, in one sentence, why it is not a plain match; then the two buttons
+  assert.ok(fig1.includes('<span class="ask">The pull request says <b>Partly</b> <span class="meas">(60% within 2 px, pass 75%)</span>.</span><ul class="because"><li>Our curve is lower.</li></ul>' +
+    '<span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Revise</button></span>'));
+  assert.ok(!fig1.slice(fig1.indexOf('class="because"'), fig1.indexOf('data-v="same"')).includes("Fig. 3 shows it too")); // the rest of it is in the details
   assert.ok(fig1.includes('<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts"><button type="button" data-v="agrees">Agrees</button><button type="button" data-v="differs">Differs</button></span></div>'));
   assert.ok(fig1.includes('aria-label="Comment for the author" hidden></textarea>') && fig1.includes('<button type="button" class="linkish addnote" hidden>Add a comment</button>'));
   assert.ok(fig1.indexOf('class="mine"') < fig1.indexOf("<textarea") && fig1.indexOf("<textarea") < fig1.indexOf('<details class="info">'));
-  const order = ['class="viewer"', 'class="dbox"', 'class="decide"', '<details class="info">', 'class="irow"', "Our curve is lower.", "2 of 2 tested causes ruled out"].map((x) => fig1.indexOf(x));
+  const order = ['class="viewer"', 'class="dbox"', 'class="decide"', "Our curve is lower.", 'data-v="same"', '<details class="info">', 'class="irow"', "2 of 2 tested causes ruled out"].map((x) => fig1.indexOf(x));
   assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
   assert.ok(!html.includes("<svg") && !html.includes('class="chart"')); // no charts drawn by the page
+  // a figure of several results gives the reason of each, by its name
+  const several = review();
+  several.papers[0].results.items.push({ ...several.papers[0].results.items[0], id: "fig1.b", label: "Fig. 1, the other curve", cause: { category: "unknown", status: "open", summary: "The other curve is higher. More." } });
+  assert.ok(core.reviewHtml(several, ctx).html.includes('<ul class="because"><li><b>The curve:</b> Our curve is lower.</li><li><b>The other curve:</b> The other curve is higher.</li></ul>'));
   // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
   const fig2 = part('id="fig-2"', 'id="numbers-0"');
   assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict") && !fig2.includes("Revise"));
@@ -178,6 +185,7 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
   // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
   const table = part('id="i-table1"', 'id="i-text.n"');
+  assert.ok(table.includes('The pull request says <b>Differs</b>.</span><ul class="because"><li>Within 2 points.</li></ul>')); // its numbers are above it: no measure here
   assert.ok(table.includes("The pull request says <b>Differs</b>.</span>") && table.includes('data-v="agrees">Agrees</button><button type="button" data-v="partly">Partly</button></span></div>'));
   assert.ok(table.indexOf('class="matrix"') < table.indexOf('class="decide"') && table.indexOf('class="decide"') < table.indexOf("<summary>Details: why</summary>"));
   assert.ok(table.includes("Within 2 points."));
@@ -209,7 +217,7 @@ test("a figure shows the original, ours and the overlap at once, each named", ()
   const order = ["<figcaption>Original</figcaption>", "<figcaption>Ours</figcaption>", "<figcaption>Overlap</figcaption>"].map((x) => fig1.indexOf(x));
   assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], String(order));
   const names = (cls) => [...fig1.slice(fig1.indexOf(`<div class="${cls}"`)).split("</div>")[0].matchAll(/data-m="\w+"[^>]*>([^<]+)</g)].map((m) => m[1]);
-  assert.deepEqual(names("modes"), ["Side by side", "Overlap, large", "Swipe", "Blink"]);
+  assert.deepEqual(names("modes"), ["Side by side", "Original", "Ours", "Overlap", "Swipe", "Blink"]); // each picture can be seen large
   assert.deepEqual(names("pick"), ["Original", "Ours", "Overlap"]); // for the cards of a phone: one picture at a time
   assert.ok(!html.includes("Published") && !html.includes("Overlay") && !html.includes(".svg"));
   // a reproduction that made no overlap picture: the original and ours, and no view of the overlap
@@ -246,9 +254,36 @@ test("the paper's own figure is found by the ways papers name it", () => {
 
   // what has no original yet, so the page knows to read the folders of a paper that is already in the repository
   const results = { items: [item("fig1", "fig1"), { id: "fig2", kind: "figure", method: "none", verdict: "not_attempted" }] };
-  assert.deepEqual(core.withoutOriginal("PMC1", results, []), { any: true, ours: [`${out}/fig1_ours.png`] });
-  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`]), { any: true, ours: [] }); // Fig. 2 has no picture at all
-  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`, `${pub}/figure-2.png`]), { any: false, ours: [] });
+  assert.deepEqual(core.withoutOriginal("PMC1", results, []), { any: true, ours: [`${out}/fig1_ours.png`], undrawn: false });
+  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`]), { any: true, ours: [], undrawn: false }); // Fig. 2 has no picture at all
+  assert.deepEqual(core.withoutOriginal("PMC1", results, [`${pub}/figure-1.png`, `${pub}/figure-2.png`]), { any: false, ours: [], undrawn: false });
+});
+
+test("pictures of ours that results.json does not list are found by their names", () => {
+  // fossil PMC2563693: the figures are scored by their values, and no item lists a picture
+  const item = (id, verdict = "partly") => ({ id, label: id, kind: "figure", method: verdict === "not_attempted" ? "none" : "values", verdict });
+  const out = "PMC1/figure-reproduction/output/figures", pub = "PMC1/figure-reproduction/published";
+  const tree = ["fig2_ours.png", "fig2_overlay.png", "fig2a_ours.png", "fig2a_overlay.png", "fig2b_ours.png", "fig3a_ours.png", "fig3a_overlay.png", "fig3b_ours.png", "figS1_ours.png", "figS1_overlay.png", "fig_s4_ours.png", "fig20_ours.png"]
+    .map((f) => `${out}/${f}`).concat([`${pub}/figure-2.png`, `${pub}/figure-3.png`, `${pub}/figure-S1.png`]);
+  const items = [item("fig1", "not_attempted"), item("fig2.a"), item("fig2.b"), item("fig3.a"), item("fig3.b"), item("fig_s1.nfkb"), item("fig_s4", "not_attempted"), item("fig5")];
+  const got = Object.fromEntries(core.figureStations("PMC1", items, tree).map((st) => [st.title, st.renders.map((r) => [r.ours, r.overlay, r.published].map((p) => p && p.split("/").pop()))]));
+  assert.deepEqual(got, {
+    "Fig. 1": [], // not attempted: nothing to look for
+    "Fig. 2": [["fig2_ours.png", "fig2_overlay.png", "figure-2.png"]], // the picture of the whole figure, not its panels, and not Fig. 20
+    "Fig. 3": [["fig3a_ours.png", "fig3a_overlay.png", "figure-3.png"], ["fig3b_ours.png", null, "figure-3.png"]], // no picture of the whole: its panels
+    "Fig. S1": [["figS1_ours.png", "figS1_overlay.png", "figure-S1.png"]],
+    "Fig. S4": [],
+    "Fig. 5": [], // attempted, and no picture by that name
+  });
+  const results = { paper: { id: "PMC1" }, items };
+  const { html } = core.reviewHtml({ repo: "o/r", label: "#7", url: "u", number: 7, sha: "a".repeat(40), files: [], papers: [{ folder: "PMC1", results, baseResults: null, tree }] }, ctx);
+  assert.equal((html.match(/found by their names: results.json lists none/g) || []).length, 3);
+  // a change that does not hold the pictures: the page knows to read the folders ours are written to
+  assert.equal(core.withoutOriginal("PMC1", results, []).undrawn, true);
+  assert.equal(core.withoutOriginal("PMC1", { items: items.filter((it) => it.id !== "fig5") }, tree).undrawn, false);
+  // a picture that an item lists is used as listed
+  const listed = { ...item("fig2.a"), outputs: ["figure-reproduction/output/figures/fig2a_ours.png"] };
+  assert.deepEqual(core.figureStations("PMC1", [listed], tree)[0].renders.map((r) => r.label), ["fig2a"]);
 });
 
 test("only the method and what is shared is shown as code", () => {
@@ -324,6 +359,17 @@ test("the review page lists the decisions apart: not decided, to change, accepte
   assert.deepEqual(row("same"), ["Table 1"]);
   assert.ok(map.includes(`data-key="${by["Table 1"]}"`) && map.includes('title="It &lt;agrees&gt;."') && map.includes('<p class="mfoot">Review copied.</p>'));
   assert.ok(!core.mapHtml(summary.units, () => ({})).includes("m-same")); // a row with nothing in it is left out
+  // what changed since the reviewer decided is said by its name in the list
+  const marked = summary.units.map((u) => (u.title === "Text" ? { ...u, before: { v: "agrees" } } : u.title === "Table 1" ? { ...u, redrawn: { sha: "abc" } } : u));
+  const list = core.mapHtml(marked, (k) => said[k] || {});
+  assert.ok(list.includes('Text <i class="pen new">changed since you decided</i>') && list.includes('Table 1 <i class="pen new">drawn again</i>'));
+  // the pictures of a figure have a name by their blobs, so the page can tell when they are drawn again
+  const r = review();
+  r.files.find((f) => f.path.endsWith("fig1_ours.png")).sha = "1".repeat(40);
+  const first = core.reviewHtml(r, ctx).summary.units[0].pics;
+  r.files.find((f) => f.path.endsWith("fig1_ours.png")).sha = "2".repeat(40);
+  assert.ok(first && first !== core.reviewHtml(r, ctx).summary.units[0].pics);
+  assert.equal(summary.units[0].pics, ""); // not known here: this change does not give the blobs
 });
 
 test("the first page keeps apart what is to review, where changes are requested and what is accepted", () => {
