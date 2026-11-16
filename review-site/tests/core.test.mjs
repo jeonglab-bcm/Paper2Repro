@@ -147,16 +147,16 @@ test("the page is laid out by the paper, and text from the repository is escaped
   assert.ok(html.includes("some&lt;one&gt;"));
   assert.ok(html.includes('<th scope="row">A</th>'));
   assert.ok(html.includes("paper error"));
-  // figures, then tables and numbers, then the code; no section of decisions
-  const at = ['id="figures-0"', 'id="numbers-0"', 'id="code"'].map((x) => html.indexOf(x));
+  // figures, then tables, then what is not asked, then the code; no section of decisions
+  const at = ['id="figures-0"', 'id="tables-0"', 'id="aside-0"', 'id="code"'].map((x) => html.indexOf(x));
   assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), String(at));
   assert.ok(!html.includes("Decisions") && !html.includes('id="decisions') && !html.includes('class="card'));
-  assert.deepEqual(summary.papers[0].counts, { exact: 1, agrees: 0, partly: 1, inconclusive: 0, differs: 1, not_attempted: 1 });
+  assert.deepEqual(summary.papers[0].counts, { exact: 2, agrees: 0, partly: 1, inconclusive: 0, differs: 1, not_attempted: 1 }); // all the pull request lists
 });
 
 test("each figure and each table has its decision right below it", () => {
   const { html, summary } = core.reviewHtml(review(), ctx);
-  assert.equal((html.match(/<div class="dbox"/g) || []).length, 5); // Fig. 1, Fig. 2, Table 1, the number in the text, the files outside
+  assert.equal((html.match(/<div class="dbox"/g) || []).length, 5); // Fig. 1, Fig. 2, Table 1, Table 2, the files outside
   assert.equal(summary.keys.length, 5);
   const part = (from, to) => html.slice(html.indexOf(from), html.indexOf(to));
   // Fig. 1: the pictures, then the question; what was measured and why is closed, after the question
@@ -179,19 +179,19 @@ test("each figure and each table has its decision right below it", () => {
   several.papers[0].results.items.push({ ...several.papers[0].results.items[0], id: "fig1.b", label: "Fig. 1, the other curve", cause: { category: "unknown", status: "open", summary: "The other curve is higher. More." } });
   assert.ok(core.reviewHtml(several, ctx).html.includes('<ul class="because"><li><b>The curve:</b> Our curve is lower.</li><li><b>The other curve:</b> The other curve is higher.</li></ul>'));
   // Fig. 2 was not attempted: there is no verdict to give, and with no picture its details start open
-  const fig2 = part('id="fig-2"', 'id="numbers-0"');
+  const fig2 = part('id="fig-2"', 'id="tables-0"');
   assert.ok(fig2.includes("A drawing.") && fig2.includes("Is this OK?") && !fig2.includes("Your verdict") && !fig2.includes("Revise"));
   assert.ok(fig2.includes('<button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button>'));
   assert.ok(fig2.includes('<details class="info" open>') && !fig2.includes('class="viewer"'));
   // Table 1: its numbers, the question, then why (closed) with the choice it rests on and the paper's own error
-  const table = part('id="i-table1"', 'id="i-text.n"');
+  const table = part('id="i-table1"', 'id="i-table2"');
   assert.ok(table.includes('The pull request says <b>Differs</b>.</span><ul class="because"><li>Within 2 points.</li></ul>')); // its numbers are above it: no measure here
   assert.ok(table.includes("The pull request says <b>Differs</b>.</span>") && table.includes('data-v="agrees">Agrees</button><button type="button" data-v="partly">Partly</button></span></div>'));
   assert.ok(table.indexOf('class="matrix"') < table.indexOf('class="decide"') && table.indexOf('class="decide"') < table.indexOf("<summary>Details: why</summary>"));
   assert.ok(table.includes("Within 2 points."));
   assert.ok(table.includes("1 choice the paper does not give") && table.includes("UniRef100 for nr"));
   assert.ok(table.includes("1 value the paper prints that does not follow from its own numbers") && table.includes("79.91, not 79.96"));
-  assert.equal((html.match(/<button type="button" data-v="same">Accept<\/button>/g) || []).length, 3); // Fig. 1, Table 1, the number in the text
+  assert.equal((html.match(/<button type="button" data-v="same">Accept<\/button>/g) || []).length, 3); // Fig. 1, Table 1, Table 2
   assert.equal((html.match(/<button type="button" data-v="agrees">Agrees<\/button>/g) || []).length, 2); // not where the pull request says Exact
   // a figure of several verdicts: Accept is as the pull request says, and Revise offers all three
   const r = review();
@@ -205,6 +205,53 @@ test("each figure and each table has its decision right below it", () => {
   assert.ok(code.includes("Conflicts with main"));
   assert.ok(code.indexOf('data-path="README.md"') < code.indexOf('class="dbox"'));
   assert.ok(!html.includes("Needs work") && !html.includes(">Agree<") && !html.includes("Disagree") && !html.includes("Reject")); // "Agree" would read as the verdict Agrees, "Reject" is too strong
+});
+
+test("the review asks about the main figures and tables; the rest is listed, closed, with no decision", () => {
+  const it = (id, label, kind = "figure") => ({ id, label, kind });
+  // of the supplement, by the id or by how the label starts
+  for (const x of [it("figS1", "Fig. S1"), it("fig_s2.a", "x"), it("tableS3", "x", "table"), it("supp.fig1", "x"), it("supplementary_table_2", "x", "table"), it("sfig4", "x"),
+    it("additional_file_4", "x", "table"), it("ed_fig1", "x"), it("f", "Supplementary Fig. 1"), it("f", "Supp. Table 2", "table"), it("f", "Table S1, all methods", "table"),
+    it("f", "Additional file 3"), it("f", "Extended Data Fig. 2"), it("f", "S1 Fig"), it("f", "Figure 3\u2014figure supplement 1"), it("f", "Appendix Table 1", "table")]) {
+    assert.equal(core.isSupplementary(x), true, `${x.id} ${x.label}`);
+    assert.equal(core.inReview(x), false);
+  }
+  // main: a figure that draws data of the supplement is still a main figure
+  for (const x of [it("fig1", "Fig. 1"), it("fig9.b", "Fig. 9b, PDR histogram of Additional File 4"), it("fig3.b", "Fig. 3b, the support of each split"), it("table1", "Table 1, LIMPIC rows", "table"),
+    it("table2.row3", "Table 2, summary of S1", "table"), it("fig5.s-curve", "Fig. 5, the S curve")]) {
+    assert.equal(core.isSupplementary(x), false, `${x.id} ${x.label}`);
+    assert.equal(core.inReview(x), true);
+  }
+  // numbers in the text and checks are not asked either
+  assert.equal(core.inReview(it("text.pac_above_gene", "PAC significantly better than Gene across datasets (Fig. 3B)", "value")), false);
+  assert.equal(core.inReview(it("package", "Package", "code_check")), false);
+  const r = review();
+  r.papers[0].results.items.push(
+    { id: "figS1", label: "Fig. S1, all curves", kind: "figure", method: "none", verdict: "not_attempted", cause: { category: "data_unavailable", status: "explained", summary: "No data. More." } },
+    { id: "text.better", label: "A better than B (Fig. 1)", kind: "value", method: "values", verdict: "partly", values: { tolerance: { printed: true }, fields: [{ name: "set one", expected: "yes", observed: "no" }, { name: "set two", expected: "yes", observed: "yes" }] },
+      cause: { category: "data_differs", status: "explained", summary: "Our data differ.", evidence: ["run/a.json"] } },
+    { id: "package", label: "Package", kind: "code_check", method: "check", verdict: "agrees", check: { passed: true, detail: "12 tests pass" } },
+  );
+  const { html, summary } = core.reviewHtml(r, ctx);
+  assert.deepEqual(summary.units.map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Table 2", "Changes outside the paper folder"]); // as without them
+  assert.deepEqual(summary.units.map((u) => u.key), core.reviewHtml(review(), ctx).summary.units.map((u) => u.key)); // decisions made before are kept
+  assert.deepEqual(core.paperUnits("PMC1", r.papers[0].results).map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Table 2"]);
+  assert.equal(summary.papers[0].counts.partly, 2); // the bar of verdicts is of all the pull request lists
+  const aside = html.slice(html.indexOf('<details class="aside" id="aside-0">'), html.indexOf('id="code"'));
+  assert.ok(aside.startsWith('<details class="aside" id="aside-0"><summary>Not asked: 1 supplementary result, 2 numbers in the text and 1 check</summary>'));
+  assert.ok(html.indexOf('id="i-table2"') < html.indexOf('id="aside-0"'));
+  for (const id of ["figS1", "text.n", "text.better", "package"]) assert.ok(aside.includes(`id="i-${id}"`), id);
+  assert.ok(!aside.includes('class="dbox"') && !aside.includes("Accept") && !aside.includes("<details class=\"ibody\" open>")); // nothing to decide, numbers closed
+  assert.ok(aside.includes("Our data differ.") && aside.includes("12 tests pass") && aside.includes('<span class="stamp v-partly">Partly</span>'));
+  assert.ok(aside.includes('<span class="ilabel">Fig. S1, all curves</span>')); // with where it is in the paper: there is no heading above it
+  assert.ok(!html.includes('id="fig-s1"')); // no station for a supplementary figure
+  // nothing set aside: no such list
+  const main = review();
+  main.papers[0].results.items = main.papers[0].results.items.filter((x) => x.kind !== "value");
+  assert.ok(!core.reviewHtml(main, ctx).html.includes('class="aside"'));
+  // a paper with no main table says so
+  main.papers[0].results.items = main.papers[0].results.items.filter((x) => x.kind !== "table");
+  assert.ok(core.reviewHtml(main, ctx).html.includes("No main table in results.json."));
 });
 
 test("a figure shows the original, ours and the overlap at once, each named", () => {
@@ -277,7 +324,8 @@ test("pictures of ours that results.json does not list are found by their names"
   });
   const results = { paper: { id: "PMC1" }, items };
   const { html } = core.reviewHtml({ repo: "o/r", label: "#7", url: "u", number: 7, sha: "a".repeat(40), files: [], papers: [{ folder: "PMC1", results, baseResults: null, tree }] }, ctx);
-  assert.equal((html.match(/found by their names: results.json lists none/g) || []).length, 3);
+  assert.equal((html.match(/found by their names: results.json lists none/g) || []).length, 2); // Fig. 2 and Fig. 3: the review does not ask about Fig. S1
+  assert.ok(html.includes("<summary>Not asked: 2 supplementary results</summary>") && !html.includes('id="fig-s1"'));
   // a change that does not hold the pictures: the page knows to read the folders ours are written to
   assert.equal(core.withoutOriginal("PMC1", results, []).undrawn, true);
   assert.equal(core.withoutOriginal("PMC1", { items: items.filter((it) => it.id !== "fig5") }, tree).undrawn, false);
@@ -333,7 +381,7 @@ test("a decision stands as the pull request says, or asks for a change", () => {
 
 test("a pull request stands by the reviewer's decisions: to review, changes requested, accepted", () => {
   const { summary } = core.reviewHtml(review(), ctx);
-  assert.deepEqual(summary.units.map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Text", "Changes outside the paper folder"]);
+  assert.deepEqual(summary.units.map((u) => u.title), ["Fig. 1", "Fig. 2", "Table 1", "Table 2", "Changes outside the paper folder"]);
   assert.deepEqual(summary.keys, summary.units.map((u) => u.key));
   const sum = { sha: "a".repeat(40), keys: summary.keys, units: summary.units };
   const by = Object.fromEntries(summary.units.map((u) => [u.title, u.key]));
@@ -342,7 +390,7 @@ test("a pull request stands by the reviewer's decisions: to review, changes requ
   assert.equal(stand({}).state, "seen");
   const some = { [by["Fig. 1"]]: { v: "agrees" }, [by["Table 1"]]: { v: "differs" } };
   assert.deepEqual([stand(some).state, stand(some).done, stand(some).all, stand(some).change], ["started", 2, 5, ["Fig. 1"]]);
-  const all = { ...some, [by["Fig. 2"]]: { v: "no" }, [by.Text]: { v: "agrees" }, [by["Changes outside the paper folder"]]: { v: "ok" } };
+  const all = { ...some, [by["Fig. 2"]]: { v: "no" }, [by["Table 2"]]: { v: "agrees" }, [by["Changes outside the paper folder"]]: { v: "ok" } };
   assert.deepEqual([stand(all).state, stand(all).change], ["changes", ["Fig. 1", "Fig. 2"]]);
   const agreed = { ...all, [by["Fig. 1"]]: { v: "partly" }, [by["Fig. 2"]]: { v: "ok" } };
   assert.equal(stand(agreed).state, "agreed");
@@ -359,7 +407,7 @@ test("a pull request stands by the reviewer's decisions: to review, changes requ
   const sig = (d) => core.reviewSig(summary.keys, (k) => d[k] || {});
   assert.equal(sig(all), sig(structuredClone(all)));
   assert.notEqual(sig(all), sig(agreed));
-  assert.notEqual(sig(all), sig({ ...all, [by.Text]: { v: "agrees", note: "a comment" } }));
+  assert.notEqual(sig(all), sig({ ...all, [by["Table 2"]]: { v: "agrees", note: "a comment" } }));
 });
 
 test("the review page lists the decisions apart: not decided, to change, accepted", () => {
@@ -369,15 +417,15 @@ test("the review page lists the decisions apart: not decided, to change, accepte
   const said = { [by["Fig. 1"]]: { v: "agrees", note: "It <agrees>." }, [by["Fig. 2"]]: { v: "no" }, [by["Table 1"]]: { v: "differs" } };
   const map = core.mapHtml(summary.units, (k) => said[k] || {}, "Review copied.");
   const row = (cls) => [...(new RegExp(`<div class="mrow m-${cls}">.*?</span></div>`, "s").exec(map) || [""])[0].matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => m[1].replace(/<[^>]+>/g, ""));
-  assert.deepEqual(row("open"), ["Text", "Changes outside the paper folder"]);
+  assert.deepEqual(row("open"), ["Table 2", "Changes outside the paper folder"]);
   assert.deepEqual(row("change"), ["Fig. 1: Partly → Agrees with a comment", "Fig. 2: Not OK"]);
   assert.deepEqual(row("same"), ["Table 1"]);
   assert.ok(map.includes(`data-key="${by["Table 1"]}"`) && map.includes('title="It &lt;agrees&gt;."') && map.includes('<p class="mfoot">Review copied.</p>'));
   assert.ok(!core.mapHtml(summary.units, () => ({})).includes("m-same")); // a row with nothing in it is left out
   // what changed since the reviewer decided is said by its name in the list
-  const marked = summary.units.map((u) => (u.title === "Text" ? { ...u, before: { v: "agrees" } } : u.title === "Table 1" ? { ...u, redrawn: { sha: "abc" } } : u));
+  const marked = summary.units.map((u) => (u.title === "Table 2" ? { ...u, before: { v: "agrees" } } : u.title === "Table 1" ? { ...u, redrawn: { sha: "abc" } } : u));
   const list = core.mapHtml(marked, (k) => said[k] || {});
-  assert.ok(list.includes('Text <i class="pen new">changed since you decided</i>') && list.includes('Table 1 <i class="pen new">drawn again</i>'));
+  assert.ok(list.includes('Table 2 <i class="pen new">changed since you decided</i>') && list.includes('Table 1 <i class="pen new">drawn again</i>'));
   // the pictures of a figure have a name by their blobs, so the page can tell when they are drawn again
   const r = review();
   r.files.find((f) => f.path.endsWith("fig1_ours.png")).sha = "1".repeat(40);

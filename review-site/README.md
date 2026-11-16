@@ -14,7 +14,13 @@ page shows what a reviewer has to judge:
   with their dates and messages. A version opens in the place of ours, and a click on the
   picture goes between it and ours as it is now, so a redraw can be seen (1 request a figure,
   when asked).
-- **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
+- **Tables.** In the shape of the paper's table, the paper's value over ours.
+- **The main figures and tables only.** The page asks about the figures and tables of the paper's
+  main text. Supplementary results, numbers in the text and checks stay in `results.json`; the
+  page lists them below the tables under **Not asked**, closed, with their verdicts and with no
+  decision, and does not count them. A result is supplementary by its id or by how its label
+  starts (`figS1`, `supp.table2`, "Fig. S3", "Supplementary Table 2", "Additional file 4",
+  "S1 Fig").
 - **The decision, right below each figure and each table.** "The pull request says Partly
   (56% within 2 px, pass 90%)." with **Accept** and **Revise**. Where the result is not a plain
   match, one sentence says why, before the buttons; the rest of it is in the details.
@@ -23,7 +29,7 @@ page shows what a reviewer has to judge:
   - **Revise** opens your own verdict (the two the pull request did not give, of **Agrees**,
     **Partly** and **Differs**) and a box for the reason. Nothing is decided until you pick the
     verdict.
-  - Where there is nothing to judge (a figure that was not attempted, a check) the question is
+  - Where there is nothing to judge (a figure that was not attempted) the question is
     **OK** or **Not OK**, and Not OK opens the reason.
   - What you accepted can still get a comment: **Add a comment**.
 

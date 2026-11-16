@@ -117,8 +117,17 @@ async function small(browser, base) {
     assert.equal(await page.locator("#fig-2 .dbox").count(), 1);
     assert.equal(await page.locator("#i-table1 + .dbox").count(), 1);
     assert.equal(await page.locator("#code .dbox").count(), 1);
-    assert.deepEqual(await page.locator("h2").allTextContents(), ["Figures", "Tables and numbers", "Code"]);
-    assert.deepEqual(await page.locator(".tabs a").evaluateAll((as) => as.map((a) => a.childNodes[0].textContent.trim())), ["Figures", "Tables and numbers", "Code"]);
+    assert.deepEqual(await page.locator("h2").allTextContents(), ["Figures", "Tables", "Code"]);
+    assert.deepEqual(await page.locator(".tabs a").evaluateAll((as) => as.map((a) => a.childNodes[0].textContent.trim())), ["Figures", "Tables", "Code"]);
+    // the number in the text is not asked: it is listed below the tables, closed, with no decision
+    const aside = page.locator("details.aside");
+    assert.equal(await aside.locator("summary").first().textContent(), "Not asked: 1 number in the text");
+    assert.equal(await aside.evaluate((d) => d.open), false);
+    assert.equal(await aside.locator(".dbox").count(), 0);
+    assert.equal(await aside.locator("#i-text\\.n").count(), 1);
+    await aside.locator("summary").first().click();
+    assert.ok(await aside.locator("#i-text\\.n").isVisible());
+    await aside.locator("summary").first().click();
     // a figure block is the pictures, then the question; what was measured and why stays closed
     const gap = await page.evaluate(() => {
       const st = document.querySelector("#fig-1"), box = st.querySelector(".dbox");
@@ -160,7 +169,7 @@ async function small(browser, base) {
     await table.locator('button[data-v="same"]').click();
     assert.equal(await table.locator(".state").textContent(), "You accept: Differs");
     assert.equal(await table.locator(".mine").isVisible(), false);
-    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Text");
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Table 2");
     // (to the top, or as far as this short page scrolls)
     await page.waitForFunction(() => { const top = document.querySelectorAll(".nblock")[1].getBoundingClientRect().top; return top >= 0 && (top < 120 || scrollY >= document.documentElement.scrollHeight - innerHeight - 2); });
     assert.ok(await page.evaluate(() => scrollY > 1000));
@@ -186,7 +195,7 @@ async function small(browser, base) {
     assert.equal(await page.locator(".bar .chg").textContent(), " · 2 to change");
     assert.deepEqual([await page.locator("#fig-1").getAttribute("data-mine"), await page.locator(".nblock").first().getAttribute("data-mine"), await page.locator(".nblock").nth(1).getAttribute("data-mine")], ["change", "same", ""]);
     const row = (cls) => page.locator(`.phead .rmap .m-${cls} .mchip`).allTextContents();
-    assert.deepEqual(await row("open"), ["Text", "Changes outside the paper folder"]);
+    assert.deepEqual(await row("open"), ["Table 2", "Changes outside the paper folder"]);
     assert.deepEqual(await row("change"), ["Fig. 1: Partly → Agrees with a comment", "Fig. 2: Not OK with a comment"]);
     assert.deepEqual(await row("same"), ["Table 1"]);
     assert.equal(await page.locator(".phead .rmap .mfoot").count(), 0);
@@ -199,18 +208,18 @@ async function small(browser, base) {
     assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1\*\*: Partly → Agrees\. The curve agrees within noise\./);
     assert.match(text, /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
     assert.match(text, /\*\*Accepted \(1\):\*\* Table 1 \(Differs\)/);
-    assert.match(text, /\*\*Not decided \(2\)\*\*\n- \*\*Text\*\*\n- \*\*Changes outside the paper folder\*\*/);
+    assert.match(text, /\*\*Not decided \(2\)\*\*\n- \*\*Table 2\*\*\n- \*\*Changes outside the paper folder\*\*/);
     assert.match(await page.locator(".phead .rmap .mfoot").textContent(), /^Review copied .+\. Nothing changed since\.$/);
   });
 
   await step("the next one not decided is one click away, and the rest can follow the pull request", async () => {
     await page.locator(".next").click();
-    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Text");
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Table 2");
     await page.locator(".next").click();
     assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Changes outside the paper folder");
     assert.equal(await page.locator(".restnote").textContent(), "2 are not decided yet.");
     await page.locator(".restbar .rest").click();
-    assert.equal(await page.locator("#i-text\\.n + .dbox .state").textContent(), "You accept: Agrees"); // the pull request says Exact
+    assert.equal(await page.locator("#i-table2 + .dbox .state").textContent(), "You accept: Agrees"); // the pull request says Exact
     assert.equal(await page.locator("#code .dbox .state").textContent(), "OK");
     assert.equal(await page.locator(".bar .done").textContent(), "5");
     assert.equal(await page.locator(".restbar").isVisible(), false);
@@ -545,7 +554,7 @@ async function small(browser, base) {
     assert.equal(await page.locator(".current .state").textContent(), "Not OK");
     await page.locator(".dnext").click();
     await page.locator('.current .decide button[data-v="same"]').click();
-    await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Text");
+    await page.waitForFunction(() => document.querySelector(".deckbar .dtitle").textContent === "Table 2");
     await page.locator(".dnext").click();
     assert.equal(await title(), "Changes outside the paper folder");
     assert.equal(await page.locator('.current details.file[data-path="README.md"]').isVisible(), true);
@@ -554,7 +563,7 @@ async function small(browser, base) {
     assert.equal(await title(), "Done");
     assert.equal(await page.locator(".deckend .dsum").textContent(), "3 of 5 decided. 2 are not decided yet.");
     await page.locator(".deckend .dfirst").click();
-    assert.equal(await title(), "Text");
+    assert.equal(await title(), "Table 2");
     await page.locator(".dnext").click(); await page.locator(".dnext").click();
     await page.locator(".deckend .rest").click();
     assert.equal(await page.locator(".deckend .dsum").textContent(), "All 5 decided.");

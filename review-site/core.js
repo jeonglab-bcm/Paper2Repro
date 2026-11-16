@@ -227,6 +227,35 @@ function partOf(item) {
 
 const sameAs = (v) => (v === "exact" ? "agrees" : v);
 
+const SUPP_ID_RE = new RegExp("^(?:" + [
+  "(?:fig(?:ure)?|tab(?:le)?)[-_. ]?s[-_. ]?\\d", // figS1, table_s2
+  "s[-_. ]?(?:fig(?:ure)?|tab(?:le)?)[-_. ]?\\d", // sfig1, s.table2
+  "s\\d+[-_. ]?(?:fig|tab|file|text|data)", // s1_fig
+  "supp(?:l(?:ement(?:ary|al)?)?)?(?:[-_. ]|fig|tab|file|data|\\d|$)", // supp.fig1, supplementary_table_2
+  "additional[-_. ]?(?:file|fig|tab|data|\\d)",
+  "ext(?:ended)?[-_. ]?(?:data[-_. ]?)?(?:fig|tab|\\d)", "ed[-_. ]?(?:fig|tab)", "appendix",
+].join("|") + ")", "i");
+const SUPP_LABEL_RE = new RegExp("^(?:" + [
+  "supp(?:l(?:ement(?:ary|al)?)?)?\\b", // Supplementary Fig. 1, Supp. Table 2
+  "additional\\s+(?:file|fig|table|data)", "extended\\s+data", "appendix\\b",
+  "(?:fig(?:ure|s)?|tab(?:le)?)\\.?\\s*s\\s?\\d", // Fig. S1, Table S2
+  "s\\d+\\s+(?:fig|table|file|text|data|appendix)", // S1 Fig, as PLOS names it
+  "fig(?:ure)?\\.?\\s*\\d+\\w*\\s*[\u2014\u2013-]\\s*figure supplement", // Figure 3—figure supplement 1
+].join("|") + ")", "i");
+/**
+ * Whether a result is of the paper's supplement, by its id or by how its label starts: figS1,
+ * supp.table2, "Fig. S3", "Supplementary Table 2", "Additional file 4", "S1 Fig". A main figure
+ * that draws data of the supplement ("Fig. 9b, PDR histogram of Additional File 4") is not.
+ */
+export const isSupplementary = (item) => SUPP_ID_RE.test(String(item.id ?? "")) || SUPP_LABEL_RE.test(String(item.label ?? "").trim());
+/**
+ * Whether the review asks about a result. It asks about the paper's main figures and tables.
+ * Supplementary results, numbers in the text and checks stay in results.json and are listed
+ * below the tables, with no decision.
+ */
+export const inReview = (item) => (item.kind === "figure" || item.kind === "table") && !isSupplementary(item);
+const listed = (results) => (results.items || []).filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
+
 /**
  * What the reviewer is asked about one figure or one table, right below it. items are the
  * results it holds (the curves of a figure, or the one table). The answer is a verdict of the
@@ -403,8 +432,7 @@ export function figureStations(folder, items, tree) {
  * figure that was attempted has no picture of ours.
  */
 export function withoutOriginal(folder, results, tree) {
-  const items = (results.items || []).filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
-  const stations = figureStations(folder, items, tree);
+  const stations = figureStations(folder, listed(results).filter(inReview), tree);
   const ours = stations.flatMap((st) => st.renders.filter((r) => !r.published).map((r) => r.ours));
   const undrawn = stations.some((st) => !st.renders.length && st.items.some((it) => it.verdict !== "not_attempted"));
   return { any: ours.length > 0 || stations.some((st) => !st.renders.length && !st.publishedOnly), ours, undrawn };
@@ -467,13 +495,14 @@ function shortLabel(item) {
   if (label.startsWith(t)) label = label.slice(t.length).replace(/^[ ,:]+/, "") || label;
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
-function itemRow(item) {
+/** One result as a row. aside: a result the review does not ask about, with its whole name and its numbers closed. */
+function itemRow(item, aside = false) {
   const changed = item._changed ? '<span class="chip new">changed here</span>' : "";
   const p = pixelScore(item);
   const detail = item.method === "check" ? `<p class="detail">${esc((item.check || {}).detail)}</p>` : "";
   let body = fieldsHtml(item);
-  if (body) body = `<details class="ibody"${item.verdict === "exact" || item.verdict === "agrees" ? "" : " open"}><summary>Numbers</summary>${body}</details>`;
-  return `<div class="irow" id="i-${esc(item.id)}"><div class="ihead">${stamp(item.verdict)}<span class="ilabel">${esc(shortLabel(item))}</span>${changed}` +
+  if (body) body = `<details class="ibody"${aside || item.verdict === "exact" || item.verdict === "agrees" ? "" : " open"}><summary>Numbers</summary>${body}</details>`;
+  return `<div class="irow" id="i-${esc(item.id)}"><div class="ihead">${stamp(item.verdict)}<span class="ilabel">${esc(aside ? String(item.label ?? item.id) : shortLabel(item))}</span>${changed}` +
     `${scoreBar(p)}<span class="meas">${p ? "" : esc(measureOf(item))}</span></div>${detail}${body}</div>`;
 }
 const imgTag = (ctx, path, alt) => `<img src="${esc(ctx.img(path))}" data-path="${esc(path)}" alt="${esc(alt)}" loading="lazy">`;
@@ -740,13 +769,13 @@ function codeHtml(ctx, files, folders, outsideBox) {
   return [out.join(""), by];
 }
 
-const KINDS = [["table", "Tables"], ["value", "Numbers in the text"], ["code_check", "Checks"]];
 /**
- * One paper's results as what a reviewer decides on, in the order of the page: each figure,
- * then each table, number and check. tree (the paths of the change) finds the pictures.
+ * One paper's results as what a reviewer decides on, in the order of the page: each main figure,
+ * then each main table. aside holds the results the review does not ask about (inReview).
+ * tree (the paths of the change) finds the pictures.
  */
 export function paperLayout(folder, results, tree = [], blobs = new Map()) {
-  const items = results.items.filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
+  const all = listed(results), items = all.filter(inReview), aside = all.filter((it) => !inReview(it));
   const pid = String((results.paper || {}).id || folder);
   const stations = figureStations(folder, items, tree);
   for (const st of stations) {
@@ -755,19 +784,16 @@ export function paperLayout(folder, results, tree = [], blobs = new Map()) {
     const drawn = st.renders.flatMap((r) => [r.ours, r.overlay]).map((path) => blobs.get(path)).filter(Boolean);
     st.unit.pics = drawn.length ? cardKey(...drawn) : "";
   }
-  const others = items.filter((it) => it.kind !== "figure");
+  const tables = items.filter((it) => it.kind === "table");
   const times = new Map();
-  for (const it of others) times.set(token(it), (times.get(token(it)) || 0) + 1);
+  for (const it of tables) times.set(token(it), (times.get(token(it)) || 0) + 1);
   const titleOf = (it) => {
     if (times.get(token(it)) < 2) return token(it);
     const part = partOf(it);
     return `${token(it)}: ${part.length > 48 ? part.slice(0, 47).trimEnd() + "…" : part}`;
   };
-  const groups = [...KINDS, [null, "Other"]].map(([kind, title]) => ({
-    kind, title,
-    blocks: others.filter((it) => (kind ? it.kind === kind : !KINDS.some(([k]) => k === it.kind))).map((it) => ({ it, unit: unitOf(pid, String(it.id), titleOf(it), [it]) })),
-  })).filter((g) => g.blocks.length);
-  return { pid, items, stations, others, groups, units: [...stations.map((st) => st.unit), ...groups.flatMap((g) => g.blocks.map((b) => b.unit))] };
+  const blocks = tables.map((it) => ({ it, unit: unitOf(pid, String(it.id), titleOf(it), [it]) }));
+  return { pid, all, aside, stations, blocks, units: [...stations.map((st) => st.unit), ...blocks.map((b) => b.unit)] };
 }
 /** The decisions a paper's results ask for, as the browser keeps them. */
 export const paperUnits = (folder, results) => paperLayout(folder, results).units.map(slimUnit);
@@ -775,21 +801,31 @@ export const paperUnits = (folder, results) => paperLayout(folder, results).unit
 const MAP_SLOT = '<section class="rmap" aria-label="Your review"></section>';
 function paperHtml(ctx, paper, idx, blobs) {
   const { folder, results, baseResults, tree } = paper;
-  const { pid, items, stations, others, groups, units } = paperLayout(folder, results, tree, blobs);
+  const { pid, all: items, aside, stations, blocks, units } = paperLayout(folder, results, tree, blobs);
   if (baseResults) {
     const old = new Map((baseResults.items || []).map((it) => [it && it.id, JSON.stringify(it)]));
     for (const it of items) it._changed = old.get(it.id) !== JSON.stringify(it);
   }
   const meta = results.paper || {};
   const counts = Object.fromEntries(VERDICTS.map((v) => [v, items.filter((it) => it.verdict === v).length]));
-  const block = ({ it, unit }, head) => {
+  const tables = blocks.map(({ it, unit }) => {
     const why = whyHtml(ctx, folder, unit);
-    return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}` +
+    return `<div class="nblock"><h4>${esc(token(it))}</h4>${itemRow(it)}` +
       `${boxHtml(unit, why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : "", { because: becauseHtml(unit) })}</div>`;
-  };
-  let numbers = "";
-  for (const g of groups) {
-    numbers += `<h3 class="ghead">${g.title}${g.kind ? ` <span class="count">${g.blocks.length}</span>` : ""}</h3>` + g.blocks.map((b) => block(b, g.kind === "table")).join("");
+  }).join("");
+  // what the review does not ask about: as the pull request gives it, closed, with no decision
+  let rest = "";
+  if (aside.length) {
+    const n = { supp: 0, text: 0, check: 0, other: 0 };
+    for (const it of aside) n[isSupplementary(it) ? "supp" : it.kind === "value" ? "text" : it.kind === "code_check" ? "check" : "other"]++;
+    const names = [[n.supp, "supplementary result"], [n.text, "number", " in the text"], [n.check, "check"], [n.other, "other result"]]
+      .filter(([k]) => k).map(([k, one, after = ""]) => `${k} ${one}${k === 1 ? "" : "s"}${after}`);
+    rest = `<details class="aside" id="aside-${idx}"><summary>Not asked: ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}</summary>` +
+      '<p class="note">The review asks about the main figures and tables of the paper. These are as the pull request gives them, with no decision to make.</p>' +
+      aside.map((it) => {
+        const why = whyHtml(ctx, folder, { items: [it] });
+        return `<div class="ablock">${itemRow(it, true)}${why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : ""}</div>`;
+      }).join("") + "</details>";
   }
   const doi = String(meta.doi || "");
   let cite = esc(meta.citation || "");
@@ -797,11 +833,11 @@ function paperHtml(ctx, paper, idx, blobs) {
   const changed = items.filter((it) => it._changed).length;
   const changedNote = baseResults && changed ? `<p class="note">This change touches ${changed} of ${items.length} items; they are marked <span class="chip new">changed here</span>.</p>` : "";
   const nav = `<nav class="tabs" aria-label="Sections"><a href="#figures-${idx}">Figures <b>${stations.length}</b></a>` +
-    `<a href="#numbers-${idx}">Tables and numbers <b>${others.length}</b></a><a href="#code">Code</a></nav>`;
+    `<a href="#tables-${idx}">Tables <b>${blocks.length}</b></a><a href="#code">Code</a></nav>`;
   const html = `<section class="paper" data-paper="${esc(pid)}"><div class="phead"><p class="pid"><span class="pmc">${esc(pid)}</span> ${cite}</p>` +
     `<h1>${esc(meta.title || folder)}</h1>${verdictBar(counts)}${changedNote}${nav}${idx === 0 ? MAP_SLOT : ""}</div>` +
-    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((st) => stationHtml(ctx, folder, st)).join("") || '<p class="note">No figure items.</p>'}</section>` +
-    `<section id="numbers-${idx}" class="sec"><h2>Tables and numbers</h2>${numbers || '<p class="note">No table or number items.</p>'}</section></section>`;
+    `<section id="figures-${idx}" class="sec"><h2>Figures</h2>${stations.map((st) => stationHtml(ctx, folder, st)).join("") || '<p class="note">No main figure in results.json.</p>'}</section>` +
+    `<section id="tables-${idx}" class="sec"><h2>Tables</h2>${tables || '<p class="note">No main table in results.json.</p>'}</section>${rest}</section>`;
   return [html, { id: pid, title: String(meta.title || folder), counts, units: units.map(slimUnit) }];
 }
 
