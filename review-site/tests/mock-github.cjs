@@ -98,6 +98,10 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
         return json(200, { merge_base_commit: { sha: mb }, commits: head === mb ? [] : [{ sha: head, commit: { author: { name, date } } }], files: files(mb, head).slice(0, 300) });
       }
       if (/^\/commits\/[0-9a-f]{40}\/check-runs$/.test(rest)) return json(200, { total_count: 1, check_runs: [{ status: "completed", conclusion: "success" }] });
+      if (rest === "/commits" && q.get("path")) {
+        const log = git(clone, ["log", `--max-count=${q.get("per_page") || 30}`, "--format=%H%x09%cI%x09%s", q.get("sha"), "--", q.get("path")]).split("\n").filter(Boolean);
+        return json(200, log.map((ln) => { const [sha, date, message] = ln.split("\t"); return { sha, commit: { message, author: { date }, committer: { date } } }; }));
+      }
       if ((m = /^\/contents\/(.+)$/.exec(rest))) {
         const names = git(clone, ["ls-tree", "--name-only", q.get("ref"), m[1] + "/"]).split("\n").filter(Boolean);
         return names.length ? json(200, names.map((p) => ({ path: p, type: "file" }))) : json(404, { message: "Not Found" });

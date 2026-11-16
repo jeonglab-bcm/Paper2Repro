@@ -496,7 +496,20 @@ function viewerHtml(ctx, render, title) {
   const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between the original and ours">' : "";
   // on a card (a phone) one picture shows at a time: its name picks it, a tap on the picture goes to the next
   const pick = single.length < 2 ? "" : `<div class="pick" role="group" aria-label="Picture">${single.map(([m, label]) => `<button type="button" data-m="${m}">${label}</button>`).join("")}</div>`;
-  return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}${pick}<div class="stage">${layers}${slider}</div></div>`;
+  // the commits that wrote our picture are read when the reviewer asks: what it was before can then be seen in its place
+  const earlier = `<p class="hist"><button type="button" class="linkish earlier" data-path="${esc(render.ours)}">Earlier versions of ours</button></p><ul class="versions" hidden></ul>`;
+  return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}${pick}<div class="stage">${layers}${slider}</div>${earlier}</div>`;
+}
+/**
+ * The versions of one picture of ours, newest first: [{sha, when, message}], when being the
+ * date as the reader's clock says it. The first is the one the page shows.
+ */
+export function versionsHtml(versions) {
+  if (versions.length < 2) return `<li class="only">Ours has one version${versions[0] ? `, written ${esc(versions[0].when)}` : ""}. There is nothing earlier to compare it with.</li>`;
+  const cut = (text) => (text.length > 96 ? text.slice(0, 95).trimEnd() + "…" : text);
+  return `<li class="vhead">Ours was written ${versions.length} times. A version opens in the place of ours; a click on the picture goes between it and ours as it is now.</li>` +
+    versions.map((x, i) => `<li><button type="button" data-sha="${esc(x.sha)}" data-when="${esc(x.when)}"${i === 0 ? ' data-now="1" aria-current="true"' : ""}>` +
+      `<b>${esc(x.when)}</b> ${esc(cut(String(x.message || "")))}${i === 0 ? ' <i class="vnow">as it is now</i>' : ""}</button></li>`).join("");
 }
 function stationHtml(ctx, folder, st) {
   const counts = {};

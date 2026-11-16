@@ -486,6 +486,25 @@ body.deck .dbox .decide .mine .opts { flex: 1 1 100%; }
 .modes { flex-wrap: wrap; }
 .note.found { font-size: 13px; }
 
+/* ours as it was at an earlier commit: in the place of ours, named in another colour than ours as it is now */
+.stage .was { display: none; }
+.viewer[data-mode="was"] .stage .was { display: block; }
+.viewer[data-mode="was"] .pub, .viewer[data-mode="was"] .ours, .viewer[data-mode="was"] .ovl { display: none; }
+.viewer[data-mode="was"] .stage, .viewer[data-flip] .stage { cursor: pointer; }
+.stage .was figcaption { background: #b4540a; }
+.hist { margin: 6px 0 0; font-size: 13px; }
+.versions { display: grid; gap: 2px; margin: 8px 0 0; font-size: 13px; max-width: 92ch; }
+.versions .vhead, .versions .only { color: var(--muted); margin-bottom: 2px; }
+.versions button { display: block; width: 100%; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: none; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.versions button:hover { border-color: var(--line); }
+.versions button[aria-current="true"] { background: var(--soft); border-color: var(--line); }
+.versions b { font-weight: 600; margin-right: 6px; white-space: nowrap; }
+.versions .vnow { font-style: normal; color: var(--ours); font-weight: 600; margin-left: 4px; white-space: nowrap; }
+.dbox .again .wasthen { color: inherit; font-weight: 600; }
+body.deck .viewer[data-mode="was"] .stage figure.was { display: block; }
+body.deck .viewer[data-flip][data-mode] .stage figcaption { display: block; }
+body.deck .viewer .hist, body.deck .viewer .versions { flex: none; }
+
 /* at the question: what was measured, why the result is not a plain match, and what changed since the reviewer decided */
 .ask .meas { font-size: inherit; }
 .because { flex: 1 1 100%; display: grid; gap: 4px; margin: 0; font-size: 14px; max-width: 92ch; }

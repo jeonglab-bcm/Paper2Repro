@@ -347,7 +347,36 @@ async function small(browser, base) {
     repo.push({ ours: true });
     await page.goto(base + "?r=o/r/pull/7");
     await page.waitForSelector(".dbox");
-    assert.equal(await page.locator("#fig-1 .again").textContent(), `Drawn again since you decided, at ${seenAt}. Your decision is kept. Seen`);
+    assert.equal(await page.locator("#fig-1 .again").textContent(), `Drawn again since you decided, at ${seenAt}. Your decision is kept. Show ours as it was Seen`);
+    // ours as it was then opens in the place of ours, and a click on the picture goes between the two
+    const fig1 = page.locator("#fig-1 .viewer");
+    await page.locator("#fig-1 .again .wasthen").click();
+    assert.deepEqual([await fig1.getAttribute("data-mode"), await fig1.locator("figure:visible figcaption").allTextContents()], ["was", ["Ours when you decided"]]);
+    await page.waitForFunction(() => document.querySelector("#fig-1 figure.was img").naturalWidth === 8);
+    assert.match(await fig1.locator("figure.was img").getAttribute("src"), new RegExp(`/o/r/${seenAt}[0-9a-f]+/PMC1/figure-reproduction/output/fig1_ours\\.png$`));
+    await fig1.locator(".stage").click();
+    assert.deepEqual([await fig1.getAttribute("data-mode"), await fig1.locator("figure:visible figcaption").allTextContents()], ["ours", ["Ours"]]);
+    await fig1.locator(".stage").click();
+    assert.equal(await fig1.getAttribute("data-mode"), "was");
+    await fig1.locator('.modes button[data-m="side"]').click();
+    assert.equal(await fig1.locator("figure:visible").count(), 3);
+    // the commits that wrote our picture are read when asked for: two here, the redraw and the first
+    await fig1.locator(".earlier").click();
+    await fig1.locator(".versions button").first().waitFor();
+    assert.match(await fig1.locator(".versions .vhead").textContent(), /^Ours was written 2 times\./);
+    const rows = await fig1.locator(".versions button").allTextContents();
+    assert.ok(/ more \d+ as it is now$/.test(rows[0]) && / paper$/.test(rows[1]), JSON.stringify(rows));
+    assert.equal(await fig1.locator(".earlier").isVisible(), false);
+    await fig1.locator(".versions button").nth(1).click();
+    assert.equal(await fig1.getAttribute("data-mode"), "was");
+    assert.match((await fig1.locator("figure:visible figcaption").allTextContents())[0], /^Ours on /);
+    assert.equal(await fig1.locator('.versions button[aria-current="true"]').count(), 1);
+    assert.match(await fig1.locator('.versions button[aria-current="true"]').textContent(), / paper$/);
+    await page.waitForFunction(() => document.querySelector("#fig-1 figure.was img").naturalWidth === 8);
+    await fig1.locator(".versions button").first().click(); // back to ours as it is now
+    assert.equal(await fig1.getAttribute("data-mode"), "ours");
+    assert.match(await fig1.locator('.versions button[aria-current="true"]').textContent(), /as it is now$/);
+    await fig1.locator('.modes button[data-m="side"]').click();
     assert.equal(await page.locator(".again:visible").count(), 1);
     assert.deepEqual([await page.locator("#fig-1 .dbox .state").textContent(), await page.locator(".bar .done").textContent()], ["You accept: Partly", "5"]);
     assert.match((await page.locator(".phead .rmap .m-same .mchip").allTextContents()).join(" | "), /Fig\. 1 with a comment drawn again/);
@@ -361,7 +390,7 @@ async function small(browser, base) {
     repo.push({ cause: "Our curve is lower after the redraw. Fig. 3 shows it too." });
     await page.goto(base + "?r=o/r/pull/7");
     await page.waitForSelector(".dbox");
-    assert.equal(await page.locator("#fig-1 .again").textContent(), `Changed since you decided, at ${decidedAt}. Then the pull request said Partly and you accepted it: “The curve agrees within noise.”. It asks again.`);
+    assert.equal(await page.locator("#fig-1 .again").textContent(), `Changed since you decided, at ${decidedAt}. Then the pull request said Partly and you accepted it: “The curve agrees within noise.”. It asks again. Show ours as it was `);
     assert.deepEqual([await page.locator("#fig-1").getAttribute("data-mine"), await page.locator(".bar .done").textContent()], ["again", "4"]);
     assert.deepEqual(await page.locator(".phead .rmap .m-open .mchip").allTextContents(), ["Fig. 1 changed since you decided"]);
     assert.deepEqual(await page.locator("#fig-1 .because li").allTextContents(), ["Our curve is lower after the redraw."]);

@@ -10,6 +10,10 @@ page shows what a reviewer has to judge:
   figure), **Ours**, and the **Overlap** (both drawn on top of each other). A click on a
   picture opens it large, alone, as wide as the block; a click on the large one shows the next,
   so two can be told apart in place. **Swipe** and **Blink** compare the original and ours.
+  **Earlier versions of ours**, below the pictures, lists the commits that wrote our picture,
+  with their dates and messages. A version opens in the place of ours, and a click on the
+  picture goes between it and ours as it is now, so a redraw can be seen (1 request a figure,
+  when asked).
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
 - **The decision, right below each figure and each table.** "The pull request says Partly
   (56% within 2 px, pass 90%)." with **Accept** and **Revise**. Where the result is not a plain
@@ -98,7 +102,8 @@ your review:
 - **Drawn again since you decided.** Our picture changed and the verdict and explanation did
   not. Your decision is kept; **Seen**, or deciding again, puts the line away.
 
-Both say the commit you decided at. The page knows this from what the browser kept when you
+Both say the commit you decided at, and **Show ours as it was** opens our picture of that commit
+in the place of ours. The page knows this from what the browser kept when you
 last opened the review, so it starts with the first visit after this was added.
 
 Keys: `j` and `k` move between decisions.

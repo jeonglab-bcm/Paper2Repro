@@ -286,6 +286,21 @@ test("pictures of ours that results.json does not list are found by their names"
   assert.deepEqual(core.figureStations("PMC1", [listed], tree)[0].renders.map((r) => r.label), ["fig2a"]);
 });
 
+test("the versions of a picture of ours are listed, newest first, the one shown marked", () => {
+  const { html } = core.reviewHtml(review(), ctx);
+  assert.ok(html.includes('<button type="button" class="linkish earlier" data-path="PMC1/figure-reproduction/output/fig1_ours.png">Earlier versions of ours</button></p><ul class="versions" hidden></ul>'));
+  const list = core.versionsHtml([
+    { sha: "c".repeat(40), when: "13 Nov, 16:18", message: "pin the kernel" },
+    { sha: "b".repeat(40), when: "13 Nov, 16:03", message: "redraw <Fig. 5>" },
+    { sha: "a".repeat(40), when: "9 Nov, 11:59", message: "x".repeat(120) },
+  ]);
+  assert.ok(list.startsWith('<li class="vhead">Ours was written 3 times.'));
+  assert.ok(list.includes(`<button type="button" data-sha="${"c".repeat(40)}" data-when="13 Nov, 16:18" data-now="1" aria-current="true"><b>13 Nov, 16:18</b> pin the kernel <i class="vnow">as it is now</i></button>`));
+  assert.ok(list.includes("<b>13 Nov, 16:03</b> redraw &lt;Fig. 5&gt;</button>") && !list.includes("<Fig. 5>"));
+  assert.ok(list.includes("x".repeat(95) + "…") && !list.includes("x".repeat(97)));
+  assert.equal(core.versionsHtml([{ sha: "a".repeat(40), when: "9 Nov, 11:59", message: "first" }]), '<li class="only">Ours has one version, written 9 Nov, 11:59. There is nothing earlier to compare it with.</li>');
+});
+
 test("only the method and what is shared is shown as code", () => {
   const { html, summary } = core.reviewHtml(review(), ctx);
   assert.match(html, /<details class="file"[^>]*data-path="PMC1\/package\/src\/m\/core.py" data-status="A" open>/);
