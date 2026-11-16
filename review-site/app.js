@@ -413,11 +413,24 @@ function wireReview(review, c, summary) {
   const paintAgain = (box, s) => {
     const u = unitOf(box), line = box.querySelector(".again"), b = u.before;
     line.textContent = "";
+    // ours as it was at the commit of the decision, where the figure has a picture of ours
+    const asItWas = (sha) => {
+      const viewer = box.closest(".station")?.querySelector(".viewer:not(.solo)");
+      if (!viewer || !sha) return;
+      const show = document.createElement("button");
+      show.type = "button";
+      show.className = "linkish wasthen";
+      show.textContent = "Show ours as it was";
+      show.addEventListener("click", () => viewer.showWas(sha, "Ours when you decided"));
+      line.append(show, " ");
+    };
     if (b && !s.v) {
       const did = !b.v ? "you left a comment" : core.standOf({ given: b.given }, b.v) === "same" ? "you accepted it" : `you said ${LABEL[b.v]}`;
-      line.textContent = `Changed since you decided, at ${String(b.sha || "").slice(0, 7)}. Then ${b.givenText ? `the pull request said ${b.givenText} and ` : ""}${did}${b.note ? `: “${b.note}”` : ""}. It asks again.`;
+      line.textContent = `Changed since you decided, at ${String(b.sha || "").slice(0, 7)}. Then ${b.givenText ? `the pull request said ${b.givenText} and ` : ""}${did}${b.note ? `: “${b.note}”` : ""}. It asks again. `;
+      asItWas(b.sha);
     } else if (u.redrawn && s.v) {
       line.textContent = `Drawn again since you decided, at ${String(u.redrawn.sha || "").slice(0, 7)}. Your decision is kept. `;
+      asItWas(u.redrawn.sha);
       const seen = document.createElement("button");
       seen.type = "button";
       seen.className = "linkish seen";
@@ -659,6 +672,17 @@ function wireReview(review, c, summary) {
     else fallback();
   }));
 
+  // a picture of a private repository cannot come from raw.githubusercontent.com: ask the API
+  const viaApi = (img) => img.addEventListener("error", async () => {
+    if (!token() || img.dataset.tried === img.src) return;
+    img.dataset.tried = img.src;
+    try {
+      const r = await fetch(`${API}/repos/${c.owner}/${c.repo}/contents/${core.encPath(img.dataset.path)}?ref=${img.dataset.sha || c.sha}`, {
+        headers: { Accept: "application/vnd.github.raw+json", Authorization: `Bearer ${token()}` },
+      });
+      if (r.ok) { const url = URL.createObjectURL(await r.blob()); img.dataset.tried = url; img.src = url; }
+    } catch { /* stays broken */ }
+  });
   // figure viewers
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   app.querySelectorAll(".viewer").forEach((v) => {
@@ -667,17 +691,62 @@ function wireReview(review, c, summary) {
     v.setMode = (m) => {
       v.dataset.mode = m;
       v.querySelectorAll(".modes button, .pick button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.m === m)));
+      v.querySelectorAll(".versions button").forEach((x) => x.setAttribute("aria-current", String(m === "was" ? x.dataset.sha === v.dataset.was : !!x.dataset.now)));
       clearInterval(timer);
       v.classList.remove("b");
       if (m === "blink" && !still) timer = setInterval(() => { if (v.isConnected) v.classList.toggle("b"); else clearInterval(timer); }, 800);
     };
-    v.querySelectorAll(".modes button, .pick button").forEach((b) => b.addEventListener("click", () => v.setMode(b.dataset.m)));
+    v.querySelectorAll(".modes button, .pick button").forEach((b) => b.addEventListener("click", () => { delete v.dataset.flip; v.setMode(b.dataset.m); }));
+    // Ours as it was at another commit, in the place of ours. While it is up, a click on the picture goes between it and ours as it is now.
+    const ours = stage.querySelector("figure.ours img");
+    v.showWas = (sha, caption) => {
+      let fig = stage.querySelector("figure.was");
+      if (!fig) {
+        fig = document.createElement("figure");
+        fig.className = "was";
+        fig.innerHTML = '<figcaption></figcaption><img alt="">';
+        stage.insertBefore(fig, range);
+        viaApi(fig.querySelector("img"));
+      }
+      fig.querySelector("figcaption").textContent = caption;
+      const img = fig.querySelector("img");
+      img.alt = caption;
+      img.dataset.path = ours.dataset.path;
+      img.dataset.sha = sha;
+      img.src = rawUrl({ owner: c.owner, repo: c.repo, sha }, ours.dataset.path);
+      v.dataset.was = sha;
+      v.dataset.flip = "1";
+      v.setMode("was");
+      v.scrollIntoView({ block: "nearest" });
+    };
+    const earlier = v.querySelector(".earlier"), versions = v.querySelector(".versions");
+    if (earlier) earlier.addEventListener("click", async () => {
+      earlier.disabled = true;
+      earlier.textContent = "Reading the versions…";
+      try {
+        const commits = await api(`/repos/${c.owner}/${c.repo}/commits?path=${encodeURIComponent(earlier.dataset.path)}&sha=${c.sha}&per_page=12`);
+        const when = (iso) => new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        versions.innerHTML = core.versionsHtml(commits.map((x) => ({ sha: x.sha, when: when((x.commit.committer || x.commit.author).date), message: x.commit.message.split("\n")[0] })));
+        versions.hidden = false;
+        earlier.parentElement.hidden = true;
+      } catch (err) {
+        earlier.disabled = false;
+        earlier.textContent = `${err instanceof GitHubError ? err.message : "The versions could not be read."} Try again`;
+      }
+    });
+    if (versions) versions.addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-sha]");
+      if (!b) return;
+      if (b.dataset.now) { delete v.dataset.flip; v.setMode("ours"); } else v.showWas(b.dataset.sha, `Ours on ${b.dataset.when}`);
+    });
     if (range) range.addEventListener("input", () => stage.style.setProperty("--cut", range.value + "%"));
     // the pictures there are, each of which can show alone and large: original, ours, overlap
     const singles = [["pub", ".pub"], ["ours", ".ours"], ["overlay", ".ovl"]].filter(([, cls]) => stage.querySelector(`figure${cls}`)).map(([m]) => m);
     stage.addEventListener("click", (ev) => {
       if (ev.target === range || v.dataset.mode === "swipe") return;
       if (v.dataset.mode === "blink") return void v.classList.toggle("b");
+      if (v.dataset.mode === "was") return void v.setMode("ours");
+      if (v.dataset.mode === "ours" && v.dataset.flip) return void v.setMode("was");
       const at = singles.indexOf(v.dataset.mode);
       // a large picture (and a card's picture): a click shows the next one, so two can be told apart in place
       if (at !== -1) return void v.setMode(singles.length > 1 ? singles[(at + 1) % singles.length] : document.body.classList.contains("deck") ? singles[0] : "side");
@@ -698,17 +767,7 @@ function wireReview(review, c, summary) {
     first.addEventListener("load", size);
     size();
   });
-  // a picture of a private repository cannot come from raw.githubusercontent.com: ask the API
-  app.querySelectorAll("img[data-path]").forEach((img) => img.addEventListener("error", async () => {
-    if (!token() || img.dataset.tried) return;
-    img.dataset.tried = "1";
-    try {
-      const r = await fetch(`${API}/repos/${c.owner}/${c.repo}/contents/${core.encPath(img.dataset.path)}?ref=${c.sha}`, {
-        headers: { Accept: "application/vnd.github.raw+json", Authorization: `Bearer ${token()}` },
-      });
-      if (r.ok) img.src = URL.createObjectURL(await r.blob());
-    } catch { /* stays broken */ }
-  }, { once: true }));
+  app.querySelectorAll("img[data-path]").forEach(viaApi);
 
   // code: a new file is read when it is opened
   app.querySelectorAll("details.file").forEach((d) => {

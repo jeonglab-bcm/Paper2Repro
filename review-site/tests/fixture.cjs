@@ -43,6 +43,8 @@ const RESULTS = {
       values: { tolerance: { printed: true }, fields: [{ name: "chains", expected: "525", observed: 525 }] } },
     { id: "fig2", label: "Fig. 2, a drawing", kind: "figure", method: "none", verdict: "not_attempted",
       cause: { category: "not_a_result", status: "explained", summary: "A drawing." } },
+    { id: "table2", label: "Table 2, the chains", kind: "table", method: "values", verdict: "exact",
+      values: { tolerance: { printed: true }, fields: [{ name: "chains", expected: "525", observed: 525 }] } },
   ],
 };
 
