@@ -266,7 +266,7 @@ export function standOf(unit, v) {
 }
 
 /** What the browser keeps of a unit, to say later where its pull request stands. */
-export const slimUnit = (u) => ({ key: u.key, title: u.title, ask: u.ask, given: u.given, givenText: u.givenText });
+export const slimUnit = (u) => ({ key: u.key, title: u.title, ask: u.ask, given: u.given, givenText: u.givenText, pics: u.pics || "" });
 
 /**
  * Where a pull request stands for this reviewer, from what the browser kept of it.
@@ -304,7 +304,7 @@ export function reviewSig(keys, said) {
 export function normalizeFiles(apiFiles) {
   return (apiFiles || []).map((f) => ({
     path: f.filename, added: f.additions || 0, deleted: f.deletions || 0,
-    status: f.status === "added" ? "A" : f.status === "removed" ? "D" : "M", patch: f.patch || "",
+    status: f.status === "added" ? "A" : f.status === "removed" ? "D" : "M", patch: f.patch || "", sha: f.sha || "",
   }));
 }
 
@@ -362,6 +362,14 @@ export function figureStations(folder, items, tree) {
     }
     return null;
   };
+  // one picture of ours (a path below the paper folder), with its overlap among `outs` and the paper's own figure
+  const add = (st, o, outs) => {
+    if (st.renders.some((r) => r.oursRel === o)) return;
+    const stem = o.split("/").pop().replace(/\.[^.]+$/, "").replace(/_ours$/, "");
+    const overlay = outs.find((x) => x.split("/").pop().startsWith(stem + "_overlay"));
+    const m = /^fig(?:ure)?[-_. ]?(s?)0*(\d+)([a-z]*)/.exec(stem.toLowerCase());
+    st.renders.push({ oursRel: o, label: stem, ours: `${folder}/${o}`, overlay: overlay ? `${folder}/${overlay}` : null, published: m ? findPublished(m[1] + m[2] + m[3]) : null });
+  };
   const stations = new Map();
   for (const it of items) {
     if (it.kind !== "figure") continue;
@@ -372,26 +380,34 @@ export function figureStations(folder, items, tree) {
     const outs = (it.outputs || []).map(String).filter((o) => RASTER.has(ext(o)) && !o.includes(".."));
     let ours = outs.filter((o) => /_ours\.[A-Za-z]+$/.test(o));
     if (!ours.length) ours = outs.filter((o) => !o.includes("overlay"));
-    for (const o of ours) {
-      if (st.renders.some((r) => r.oursRel === o)) continue;
-      const stem = o.split("/").pop().replace(/\.[^.]+$/, "").replace(/_ours$/, "");
-      const overlay = outs.find((x) => x.split("/").pop().startsWith(stem + "_overlay"));
-      const m = /^fig(?:ure)?[-_. ]?(s?)0*(\d+)([a-z]*)/.exec(stem.toLowerCase());
-      st.renders.push({ oursRel: o, label: stem, ours: `${folder}/${o}`, overlay: overlay ? `${folder}/${overlay}` : null, published: m ? findPublished(m[1] + m[2] + m[3]) : null });
-    }
+    for (const o of ours) add(st, o, outs);
   }
-  for (const st of stations.values()) if (!st.renders.length) st.publishedOnly = findPublished(st.key);
+  // A figure whose results list no picture: ours are found by their names among the paths, fig2_ours.png for
+  // the whole of Fig. 2, or its panels (fig2a_ours.png, ...) when there is no picture of the whole.
+  const rel = (p) => p.slice(folder.length + 1);
+  const named = tree.filter((p) => p.startsWith(folder + "/") && RASTER.has(ext(p)) && /[-_.]ours\.[A-Za-z]+$/.test(p)).map((p) => [figureKeyOf(p), rel(p)]).filter(([k]) => k !== null);
+  const beside = tree.filter((p) => p.startsWith(folder + "/") && RASTER.has(ext(p)) && p.includes("overlay")).map(rel);
+  for (const st of stations.values()) {
+    if (!st.renders.length && figKey(st.items[0].id) && st.items.some((it) => it.verdict !== "not_attempted")) {
+      const whole = named.filter(([k]) => k === st.key), panels = named.filter(([k]) => k.startsWith(st.key) && /^[a-z]+$/.test(k.slice(st.key.length)));
+      for (const [, o] of (whole.length ? whole : panels).sort((x, y) => x[1].localeCompare(y[1]))) add(st, o, beside.filter((x) => x.slice(0, x.lastIndexOf("/")) === o.slice(0, o.lastIndexOf("/"))));
+      st.found = st.renders.length > 0; // by name, not listed in results.json
+    }
+    if (!st.renders.length) st.publishedOnly = findPublished(st.key);
+  }
   return [...stations.values()];
 }
 /**
- * What of a paper's figures has no published picture among the paths of tree: `any` when a
- * figure has none at all, and `ours`, our pictures that have nothing to stand next to.
+ * What of a paper's figures is not among the paths of tree: `any` when a figure has no published
+ * picture at all, `ours`, our pictures that have nothing to stand next to, and `undrawn` when a
+ * figure that was attempted has no picture of ours.
  */
 export function withoutOriginal(folder, results, tree) {
   const items = (results.items || []).filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
   const stations = figureStations(folder, items, tree);
   const ours = stations.flatMap((st) => st.renders.filter((r) => !r.published).map((r) => r.ours));
-  return { any: ours.length > 0 || stations.some((st) => !st.renders.length && !st.publishedOnly), ours };
+  const undrawn = stations.some((st) => !st.renders.length && st.items.some((it) => it.verdict !== "not_attempted"));
+  return { any: ours.length > 0 || stations.some((st) => !st.renders.length && !st.publishedOnly), ours, undrawn };
 }
 
 // ----------------------------------------------------------------- drawing
@@ -473,13 +489,12 @@ function viewerHtml(ctx, render, title) {
   layers += fig("ours", render.ours, "Ours", "ours");
   if (render.overlay) layers += fig("ovl", render.overlay, "Overlap", "original and ours on top of each other");
   const n = (render.published ? 1 : 0) + 1 + (render.overlay ? 1 : 0);
-  const modes = [["side", "Side by side"]];
-  if (render.overlay) modes.push(["overlay", "Overlap, large"]);
-  if (render.published) modes.push(["swipe", "Swipe"], ["blink", "Blink"]);
+  // each picture can be seen large, one at a time: by its name here, or by a click on it
+  const single = [...(render.published ? [["pub", "Original"]] : []), ["ours", "Ours"], ...(render.overlay ? [["overlay", "Overlap"]] : [])];
+  const modes = [["side", "Side by side"], ...(single.length > 1 ? single : []), ...(render.published ? [["swipe", "Swipe"], ["blink", "Blink"]] : [])];
   const buttons = modes.length < 2 ? "" : `<div class="modes" role="group" aria-label="View">${modes.map(([m, label], i) => `<button type="button" data-m="${m}"${i === 0 ? ' aria-pressed="true"' : ""}>${label}</button>`).join("")}</div>`;
   const slider = render.published ? '<input type="range" class="swipe" min="0" max="100" value="50" aria-label="Swipe between the original and ours">' : "";
   // on a card (a phone) one picture shows at a time: its name picks it, a tap on the picture goes to the next
-  const single = [...(render.published ? [["pub", "Original"]] : []), ["ours", "Ours"], ...(render.overlay ? [["overlay", "Overlap"]] : [])];
   const pick = single.length < 2 ? "" : `<div class="pick" role="group" aria-label="Picture">${single.map(([m, label]) => `<button type="button" data-m="${m}">${label}</button>`).join("")}</div>`;
   return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}${pick}<div class="stage">${layers}${slider}</div></div>`;
 }
@@ -488,14 +503,18 @@ function stationHtml(ctx, folder, st) {
   for (const it of st.items) counts[it.verdict] = (counts[it.verdict] || 0) + 1;
   const dots = VERDICTS.filter((v) => counts[v]).map((v) => `<i class="dot v-${v}" title="${counts[v]} ${VERDICT_LABEL[v].toLowerCase()}"></i>`.repeat(counts[v])).join("");
   let views = st.renders.map((r) => (st.renders.length > 1 ? `<p class="rlabel">${esc(r.label)}</p>` : "") + viewerHtml(ctx, r, st.title)).join("");
+  if (st.found) views += '<p class="note found">These pictures of ours are found by their names: results.json lists none for this figure.</p>';
   if (!views && st.publishedOnly) views = `<div class="viewer solo"><div class="stage solo"><figure class="pub"><figcaption>Original; there is no figure of ours</figcaption>${imgTag(ctx, st.publishedOnly, st.title + ", original")}</figure></div></div>`;
   // what the pull request measured for each curve, and why: there for who wants it, closed, below the question.
   // A figure with no picture at all has nothing else to show, so it starts open.
   const n = st.items.length;
   const details = `<details class="info"${views ? "" : " open"}><summary>Details: what the pull request measured${n > 1 ? ` for its ${n} results` : ""}, and why</summary>` +
     `<div class="rows">${st.items.map(itemRow).join("")}</div>${whyHtml(ctx, folder, st.unit)}</details>`;
+  // The rows of the details are closed, so the question itself says what was measured (one result) and why
+  // the result is not a plain match. Open details say it already.
+  const at = views ? { measure: n === 1 ? measureOf(st.items[0]) : "", because: becauseHtml(st.unit) } : {};
   return `<section class="station" id="fig-${esc(st.key)}"><header class="shead"><h3>${esc(st.title)}</h3><span class="dots">${dots}</span></header>` +
-    `${views ? `<div class="views">${views}</div>` : ""}${boxHtml(st.unit, details)}</section>`;
+    `${views ? `<div class="views">${views}</div>` : ""}${boxHtml(st.unit, details, at)}</section>`;
 }
 const stripPath = (evidence) => String(evidence ?? "").replace(/^\S+\.\w+(?: \([^)]*\))?:\s+/, "");
 function evidenceHtml(ctx, folder, evidence) {
@@ -557,31 +576,52 @@ export function mapHtml(units, said, foot = "") {
     if (how === "change") text += `: ${u.givenText ? `${esc(u.givenText)} → ` : ""}${SAID_LABEL[s.v]}`;
     const note = String(s.note || "").trim();
     if (note) text += ` <i class="pen" title="${esc(note)}">with a comment</i>`;
+    if (u.before && how === "open") text += ' <i class="pen new">changed since you decided</i>';
+    if (u.redrawn && how !== "open") text += ' <i class="pen new">drawn again</i>';
     rows[how === "change" || how === "open" ? how : "same"].push(`<button type="button" class="mchip" data-key="${esc(u.key)}">${text}</button>`);
   }
   const row = (cls, title, chips) => (chips.length ? `<div class="mrow m-${cls}"><span class="mname">${title} <b>${chips.length}</b></span><span class="mchips">${chips.join("")}</span></div>` : "");
   return '<h3 class="mhead">Your review</h3>' + row("open", "Not decided", rows.open) + row("change", "To change", rows.change) + row("same", "Accepted", rows.same) +
     (foot ? `<p class="mfoot">${esc(foot)}</p>` : "");
 }
+/**
+ * Why the results of one figure or table are not a plain match, in one sentence each: what the
+ * reviewer has to know to answer. The whole of it is in the details.
+ */
+function becauseHtml(unit) {
+  const causes = new Map();
+  for (const it of unit.items) {
+    const lead = it.cause ? firstSentence(it.cause.summary)[0] : "";
+    if (!lead) continue;
+    if (!causes.has(lead)) causes.set(lead, []);
+    causes.get(lead).push(it);
+  }
+  if (!causes.size) return "";
+  const rows = [...causes].slice(0, 3).map(([lead, its]) => `<li>${its.length < unit.items.length ? `<b>${esc(its.map(shortLabel).join("; "))}:</b> ` : ""}${esc(lead)}</li>`);
+  const more = causes.size - rows.length;
+  return `<ul class="because">${rows.join("")}${more > 0 ? `<li class="rest">and ${more} more in the details</li>` : ""}</ul>`;
+}
 const COMMENT = '<textarea rows="1" placeholder="Comment for the author" aria-label="Comment for the author" hidden></textarea>';
 /**
  * The decision that sits right below a figure or a table. One click passes what the reviewer
  * agrees with: Accept (the pull request's verdict stands), or OK where there is no verdict.
  * Revise opens the reviewer's own verdict and the reason; Not OK opens the reason. The closed
- * details come last.
+ * details come last. measure and because say, at the question, what the pull request measured
+ * and why the result is not a plain match.
  */
-function boxHtml(unit, details = "") {
+function boxHtml(unit, details = "", { measure = "", because = "" } = {}) {
   let ask, mine = "";
   if (unit.ask === "verdict") {
     const others = ["agrees", "partly", "differs"].filter((v) => v !== unit.given);
-    ask = `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}.</span>` +
+    ask = `<span class="ask">The pull request says <b>${esc(unit.givenText)}</b>${unit.items.length > 1 ? ` for ${esc(unit.title)}` : ""}${measure ? ` <span class="meas">(${esc(measure)})</span>` : ""}.</span>${because}` +
       '<span class="opts"><button type="button" data-v="same">Accept</button><button type="button" class="differ">Revise</button></span>';
     mine = `<div class="mine" hidden><span class="ask">Your verdict:</span><span class="opts">${others.map((v) => `<button type="button" data-v="${v}">${VERDICT_LABEL[v]}</button>`).join("")}</span></div>`;
   } else {
-    ask = '<span class="ask">Is this OK?</span><span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>';
+    ask = `<span class="ask">Is this OK?</span>${because}<span class="opts"><button type="button" data-v="ok">OK</button><button type="button" data-v="no">Not OK</button></span>`;
   }
+  // .again: what changed since the reviewer decided, said by the app from what the browser kept
   return `<div class="dbox" id="d-${unit.key}" data-key="${unit.key}" data-title="${esc(unit.title)}" data-ask="${unit.ask}" data-given="${esc(unit.given)}" data-given-text="${esc(unit.givenText)}" tabindex="-1">` +
-    `${unit.notes || ""}<footer class="decide">${ask}${mine}${COMMENT}<span class="state" aria-live="polite"></span>` +
+    `${unit.notes || ""}<p class="again" hidden></p><footer class="decide">${ask}${mine}${COMMENT}<span class="state" aria-live="polite"></span>` +
     `<button type="button" class="linkish addnote" hidden>Add a comment</button><button type="button" class="dgo">Next</button></footer>${details}</div>`;
 }
 export const fileAnchor = (path) => cardKey("file", path).slice(0, 10);
@@ -692,11 +732,16 @@ const KINDS = [["table", "Tables"], ["value", "Numbers in the text"], ["code_che
  * One paper's results as what a reviewer decides on, in the order of the page: each figure,
  * then each table, number and check. tree (the paths of the change) finds the pictures.
  */
-export function paperLayout(folder, results, tree = []) {
+export function paperLayout(folder, results, tree = [], blobs = new Map()) {
   const items = results.items.filter((it) => it && typeof it === "object" && it.id !== undefined && it.id !== null);
   const pid = String((results.paper || {}).id || folder);
   const stations = figureStations(folder, items, tree);
-  for (const st of stations) st.unit = unitOf(pid, "fig-" + st.key, st.title, st.items);
+  for (const st of stations) {
+    st.unit = unitOf(pid, "fig-" + st.key, st.title, st.items);
+    // a name for our pictures as they are in this change: another one when a picture is drawn again
+    const drawn = st.renders.flatMap((r) => [r.ours, r.overlay]).map((path) => blobs.get(path)).filter(Boolean);
+    st.unit.pics = drawn.length ? cardKey(...drawn) : "";
+  }
   const others = items.filter((it) => it.kind !== "figure");
   const times = new Map();
   for (const it of others) times.set(token(it), (times.get(token(it)) || 0) + 1);
@@ -715,9 +760,9 @@ export function paperLayout(folder, results, tree = []) {
 export const paperUnits = (folder, results) => paperLayout(folder, results).units.map(slimUnit);
 
 const MAP_SLOT = '<section class="rmap" aria-label="Your review"></section>';
-function paperHtml(ctx, paper, idx) {
+function paperHtml(ctx, paper, idx, blobs) {
   const { folder, results, baseResults, tree } = paper;
-  const { pid, items, stations, others, groups, units } = paperLayout(folder, results, tree);
+  const { pid, items, stations, others, groups, units } = paperLayout(folder, results, tree, blobs);
   if (baseResults) {
     const old = new Map((baseResults.items || []).map((it) => [it && it.id, JSON.stringify(it)]));
     for (const it of items) it._changed = old.get(it.id) !== JSON.stringify(it);
@@ -727,7 +772,7 @@ function paperHtml(ctx, paper, idx) {
   const block = ({ it, unit }, head) => {
     const why = whyHtml(ctx, folder, unit);
     return `<div class="nblock">${head ? `<h4>${esc(token(it))}</h4>` : ""}${itemRow(it)}` +
-      `${boxHtml(unit, why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : "")}</div>`;
+      `${boxHtml(unit, why ? `<details class="info"><summary>Details: why</summary>${why}</details>` : "", { because: becauseHtml(unit) })}</div>`;
   };
   let numbers = "";
   for (const g of groups) {
@@ -758,8 +803,9 @@ export function reviewHtml(review, ctx) {
   for (const f of review.files) f.cat = classify(f.path, folders)[0];
   const shared = review.files.filter((f) => f.cat === "shared");
   const sections = [], summaries = [];
+  const blobs = new Map(review.files.filter((f) => f.sha).map((f) => [f.path, f.sha]));
   review.papers.forEach((paper, idx) => {
-    const [html, summary] = paperHtml(ctx, paper, idx);
+    const [html, summary] = paperHtml(ctx, paper, idx, blobs);
     sections.push(html);
     summaries.push(summary);
   });

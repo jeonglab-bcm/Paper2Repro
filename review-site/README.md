@@ -7,11 +7,13 @@ A Paper2Repro pull request has tens of thousands of lines, and most of them are 
 page shows what a reviewer has to judge:
 
 - **Figures.** Three pictures at once, each named above it: the **Original** (the published
-  figure), **Ours**, and the **Overlap** (both drawn on top of each other). The overlap can be
-  enlarged, and the original and ours can be swiped or blinked.
+  figure), **Ours**, and the **Overlap** (both drawn on top of each other). A click on a
+  picture opens it large, alone, as wide as the block; a click on the large one shows the next,
+  so two can be told apart in place. **Swipe** and **Blink** compare the original and ours.
 - **Tables and numbers.** In the shape of the paper's table, the paper's value over ours.
-- **The decision, right below each figure and each table.** "The pull request says Partly."
-  with **Accept** and **Revise**.
+- **The decision, right below each figure and each table.** "The pull request says Partly
+  (56% within 2 px, pass 90%)." with **Accept** and **Revise**. Where the result is not a plain
+  match, one sentence says why, before the buttons; the rest of it is in the details.
   - **Accept** is one click: the pull request's verdict stands, and the next figure or table
     that is not decided comes to the top.
   - **Revise** opens your own verdict (the two the pull request did not give, of **Agrees**,
@@ -88,6 +90,17 @@ minutes, or every minute with a GitHub token.
 A decision is kept by what it is about. When the pull request changes, a figure or table whose
 verdicts and explanations did not change keeps your decision, and one that changed asks again.
 
+What changed since you decided is said at its figure or table, and by its name in the list of
+your review:
+
+- **Changed since you decided.** The verdict or the explanation changed, so it asks again. The
+  line says what the pull request said then and what you answered, with your comment.
+- **Drawn again since you decided.** Our picture changed and the verdict and explanation did
+  not. Your decision is kept; **Seen**, or deciding again, puts the line away.
+
+Both say the commit you decided at. The page knows this from what the browser kept when you
+last opened the review, so it starts with the first visit after this was added.
+
 Keys: `j` and `k` move between decisions.
 
 ## On a phone: cards
@@ -126,6 +139,9 @@ the pictures and the code. There is no server and no build for each pull request
   picture shows ours and the overlap only. For a change to a paper that is already in the
   repository the page reads the folder, as the change does not hold the pictures (1 request,
   2 when they are next to ours).
+- **Our pictures** are the ones each figure lists in `results.json`. Where a figure that was
+  attempted lists none, the page takes the pictures named for it (`fig2_ours.png`, or its
+  panels `fig2a_ours.png`, ... when there is no picture of the whole) and says so below them.
 - **Conflicts** are GitHub's: the page says when a pull request conflicts with its base. It
   does not compare open pull requests with each other.
 
