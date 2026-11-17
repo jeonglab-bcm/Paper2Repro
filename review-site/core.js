@@ -294,6 +294,38 @@ export function standOf(unit, v) {
   return v === unit.given ? "same" : "change";
 }
 
+/**
+ * What a review says to GitHub, from the decisions: REQUEST_CHANGES when one of them is to change,
+ * APPROVE when all are decided and stand as the pull request says, and COMMENT while something is
+ * not decided (or was decided in an older version of the page, which did not keep what the pull
+ * request said). An approval says that the pull request's verdicts are right, also where a verdict
+ * is Differs: it does not say that the paper came back.
+ */
+export function reviewEvent(units, said) {
+  let open = 0;
+  for (const u of units) {
+    const how = standOf(u, said(u.key).v);
+    if (how === "change") return "REQUEST_CHANGES";
+    if (how !== "same") open++;
+  }
+  return open || !units.length ? "COMMENT" : "APPROVE";
+}
+/** The button that sends a review with each event, and what the review then does, after "Your review is on #7 and". */
+export const EVENT_LABEL = { APPROVE: "Approve", REQUEST_CHANGES: "Request changes", COMMENT: "Comment" };
+export const EVENT_DOES = { APPROVE: "approves it", REQUEST_CHANGES: "requests changes", COMMENT: "is a comment" };
+
+/** Who GitHub says is asked to review a pull request: the logins of its requested reviewers, then its teams. */
+export const reviewersOf = (p) => [...((p && p.requested_reviewers) || []).map((u) => u && u.login), ...((p && p.requested_teams) || []).map((t) => t && (t.name || t.slug))]
+  .filter(Boolean).map(String);
+const sameLogin = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
+/** "Review asked of you and alice": the names as GitHub gives them, the reader first and as "you". Empty when nobody is asked. */
+export function askedText(names, me = "") {
+  const mine = names.some((n) => sameLogin(n, me)), rest = names.filter((n) => !sameLogin(n, me));
+  const all = [...(mine ? ["you"] : []), ...rest];
+  if (!all.length) return "";
+  return `Review asked of ${all.length > 1 ? `${all.slice(0, -1).join(", ")} and ${all.at(-1)}` : all[0]}`;
+}
+
 /** What the browser keeps of a unit, to say later where its pull request stands. */
 export const slimUnit = (u) => ({ key: u.key, title: u.title, ask: u.ask, given: u.given, givenText: u.givenText, pics: u.pics || "" });
 
@@ -903,8 +935,10 @@ export function reviewHtml(review, ctx) {
   bits.push(`<span class="mono">${esc(review.sha.slice(0, 7))}</span>`);
   if (review.author) bits.push(esc(review.author));
   if (review.updated) bits.push(esc(review.updated.slice(0, 10)));
+  const asked = askedText(review.reviewers || [], review.me);
+  if (asked) bits.push(`<span class="asked${(review.reviewers || []).some((n) => sameLogin(n, review.me)) ? " you" : ""}">${esc(asked.charAt(0).toLowerCase() + asked.slice(1))}</span>`);
   const chips = (review.draft ? '<span class="chip">draft</span>' : "") + '<span class="ci"></span>';
-  // a pull request takes the review as a comment; a branch has none, so its review is copied
+  // a pull request takes the review; a branch has none, so its review is copied. The app names the button for what it does next.
   const send = review.number ? "Add review" : "Copy review";
   const html = `<header class="top"><div class="wrap"><a class="back" href="./">All reviews</a><span class="refline">${esc(review.repo)} · ${bits.join(" · ")} ${chips}</span></div></header>` +
     `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${shared.length ? "" : notes}${code}</section>` +
@@ -948,25 +982,30 @@ function standingFacts(st) {
 /**
  * The open pull requests, apart by where each stands for this reviewer: to review, changes
  * requested, accepted. mine: number → standing(), with sent {state, when} and again where known.
+ * me: the reader's GitHub login, where a token says it: their own review requests are named and come first.
  */
-export function pullsHtml(repo, pulls, mine = new Map()) {
+export function pullsHtml(repo, pulls, mine = new Map(), me = "") {
   const [owner, name] = repo.split("/");
   const stOf = (p) => mine.get(p.number) || { state: "new", done: 0, all: 0, change: [] };
+  const forMe = (p) => reviewersOf(p).some((n) => sameLogin(n, me));
   const card = (p) => {
     const st = stOf(p), who = [p.user && p.user.login, (p.updated_at || "").slice(0, 10)].filter(Boolean).join(" · ");
+    const asked = askedText(reviewersOf(p), me);
     return `<a class="rcard s-${st.state}" href="${routeOf({ owner, repo: name, kind: "pull", number: p.number })}" data-number="${p.number}" data-sha="${esc(p.head && p.head.sha)}" data-title="${esc(p.title)}" data-ref="${esc(p.head && p.head.ref)}">` +
       `<div class="rtop"><span class="pmc"></span><span class="rref">#${p.number}</span><span class="grow"></span><span class="rstate">${STATE[st.state][1]}</span></div><h2>${esc(p.title)}</h2><div class="rbar"></div>` +
-      `<p class="facts">${standingFacts(st)}</p><p class="who">${esc(who)} ${p.draft ? '<span class="chip">draft</span>' : ""}</p></a>`;
+      `<p class="facts">${standingFacts(st)}</p><p class="who">${esc(who)} ${p.draft ? '<span class="chip">draft</span>' : ""}</p>` +
+      `${asked ? `<p class="asked${forMe(p) ? " you" : ""}">${esc(asked)}</p>` : ""}</a>`;
   };
   return HOME_GROUPS.map(([key, title]) => {
-    const ps = pulls.filter((p) => STATE[stOf(p).state][0] === key);
+    // in each group, the pull requests that wait for the reader come first
+    const ps = pulls.filter((p) => STATE[stOf(p).state][0] === key).sort((a, b) => Number(forMe(b)) - Number(forMe(a)));
     return ps.length ? `<section class="rgroup g-${key}"><h3 class="ghead">${title} <span class="count">${ps.length}</span></h3><div class="rgrid">${ps.map(card).join("")}</div></section>` : "";
   }).join("");
 }
 
 /** The first page: a box to paste a link into, and what is open in the usual repository. */
-export function homeHtml({ repo, pulls, recent, error, mine }) {
-  const list = pulls && pulls.length ? pullsHtml(repo, pulls, mine) : `<p class="note home-note">${pulls ? "Nothing is open." : "Loading…"}</p>`;
+export function homeHtml({ repo, pulls, recent, error, mine, me }) {
+  const list = pulls && pulls.length ? pullsHtml(repo, pulls, mine, me) : `<p class="note home-note">${pulls ? "Nothing is open." : "Loading…"}</p>`;
   const recents = (recent || []).map((r) => `<li><a href="${esc(r.route)}">${esc(r.label)}</a></li>`).join("");
   return '<header class="top"><div class="wrap"><span class="refline">Reproduction review</span><span class="grow"></span><button type="button" class="linkish token">GitHub token</button></div></header>' +
     '<main class="wrap"><div class="phead"><h1>Paste a pull request or branch link</h1>' +

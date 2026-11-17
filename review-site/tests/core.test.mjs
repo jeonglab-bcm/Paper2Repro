@@ -484,6 +484,42 @@ test("the first page keeps apart what is to review, where changes are requested 
   assert.equal(facts(5), "Not opened yet | ");
 });
 
+test("a review says to GitHub what the decisions say: approve, request changes, or comment", () => {
+  const { summary } = core.reviewHtml(review(), ctx);
+  const by = Object.fromEntries(summary.units.map((u) => [u.title, u.key]));
+  const event = (said) => core.reviewEvent(summary.units, (k) => said[k] || {});
+  const all = { [by["Fig. 1"]]: { v: "partly" }, [by["Fig. 2"]]: { v: "ok" }, [by["Table 1"]]: { v: "pr" }, [by["Table 2"]]: { v: "agrees" }, [by["Changes outside the paper folder"]]: { v: "ok" } };
+  assert.equal(event(all), "APPROVE"); // all decided, all as the pull request says: also where it says Partly and Differs
+  assert.equal(event({ ...all, [by["Fig. 1"]]: { v: "agrees" } }), "REQUEST_CHANGES"); // a verdict of the reviewer's own
+  assert.equal(event({ ...all, [by["Fig. 2"]]: { v: "no" } }), "REQUEST_CHANGES");
+  assert.equal(event({ [by["Fig. 2"]]: { v: "no" } }), "REQUEST_CHANGES"); // one to change is enough, the rest open
+  assert.equal(event({ ...all, [by["Table 2"]]: {} }), "COMMENT"); // one is not decided: no approval yet
+  assert.equal(event({}), "COMMENT");
+  assert.equal(core.reviewEvent([], () => ({})), "COMMENT"); // nothing to decide is nothing to approve
+  // a verdict kept by an older version of the page, which did not keep what the pull request said: not an approval
+  assert.equal(core.reviewEvent([{ key: "k" }], () => ({ v: "agrees" })), "COMMENT");
+  assert.deepEqual(Object.keys(core.EVENT_LABEL), ["APPROVE", "REQUEST_CHANGES", "COMMENT"]);
+});
+
+test("who is asked to review is named on the card and next to the commit, the reader as you and first", () => {
+  const pull = (number, more = {}) => ({ number, title: `Reproduce PMC${number}`, user: { login: "x" }, head: { sha: "abc", ref: "b" }, ...more });
+  assert.deepEqual(core.reviewersOf(pull(1, { requested_reviewers: [{ login: "alice" }, null], requested_teams: [{ slug: "stats", name: "Stats team" }, { slug: "ml" }] })), ["alice", "Stats team", "ml"]);
+  assert.deepEqual(core.reviewersOf(pull(1)), []);
+  assert.equal(core.askedText(["alice"]), "Review asked of alice");
+  assert.equal(core.askedText(["alice", "bob", "Stats team"]), "Review asked of alice, bob and Stats team");
+  assert.equal(core.askedText(["alice", "Bob"], "bob"), "Review asked of you and alice"); // by the login, whatever its case
+  assert.equal(core.askedText([], "bob"), "");
+  const pulls = [pull(1, { requested_reviewers: [{ login: "al<ice" }] }), pull(2), pull(3, { requested_reviewers: [{ login: "al<ice" }, { login: "Bob" }] })];
+  const cards = (me) => core.pullsHtml("o/r", pulls, new Map(), me).split('<a class="rcard').slice(1).map((c) => [/data-number="(\d+)"/.exec(c)[1], (/<p class="asked( you)?">(.*?)<\/p>/.exec(c) || []).slice(1).join("|")]);
+  assert.deepEqual(cards(""), [["1", "|Review asked of al&lt;ice"], ["2", ""], ["3", "|Review asked of al&lt;ice and Bob"]]);
+  assert.deepEqual(cards("bob"), [["3", " you|Review asked of you and al&lt;ice"], ["1", "|Review asked of al&lt;ice"], ["2", ""]]); // the reader's own first
+  // the review page: next to the commit
+  const top = (r) => /<span class="refline">(.*?)<\/span><\/div><\/header>/.exec(core.reviewHtml(r, ctx).html)[1];
+  assert.ok(top({ ...review(), reviewers: ["alice", "Bob"] }).includes('<span class="asked">review asked of alice and Bob</span>'));
+  assert.ok(top({ ...review(), reviewers: ["alice", "Bob"], me: "bob" }).includes('<span class="asked you">review asked of you and alice</span>'));
+  assert.ok(!top(review()).includes("asked"));
+});
+
 test("the first page lists what is open, each with its address", () => {
   const html = core.homeHtml({ repo: "o/r", pulls: [{ number: 7, title: "Reproduce <PMC1>", user: { login: "x" }, head: { sha: "abc", ref: "paper" }, updated_at: "2026-11-09" }], recent: [] });
   assert.ok(html.includes('href="?r=o/r/pull/7"'));

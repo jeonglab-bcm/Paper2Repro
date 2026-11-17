@@ -534,3 +534,11 @@ body.deck .viewer .hist, body.deck .viewer .versions { flex: none; }
 .bar .sendnote { position: absolute; right: max(16px, calc((100vw - 1080px) / 2 + 16px)); bottom: calc(100% + 8px); max-width: min(560px, calc(100vw - 32px)); margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: 0 4px 16px rgba(0, 0, 0, .2); }
 .sendnote a, .sendnote .linkish { color: inherit; font-size: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .deckend .sendnote { font-size: 13px; color: var(--muted); }
+
+/* who is asked to review: on a card of the first page and next to the commit; the reader's own in the accent */
+.rcard .asked { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.asked.you { color: var(--accent); font-weight: 600; }
+.send .where { white-space: pre; } /* its leading space, in a button that lays its parts out in a row */
+@media (max-width: 700px) { .send .where { display: none; } }
+/* a narrow bar: the count takes two lines where it has to, so the buttons stay on the screen */
+@media (max-width: 520px) { .bar .progress { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.25; } .bar .grow { display: none; } }

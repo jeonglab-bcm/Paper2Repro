@@ -9,12 +9,13 @@ function git(dir, args, text = true) {
 }
 const TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", json: "application/json" };
 
-/** pulls: [{number, title, user: {login}, head: {ref}, updated_at, draft, git}] where git is the local ref of its head. */
+/** pulls: [{number, title, user: {login}, head: {ref}, updated_at, draft, git, requested_reviewers, requested_teams}] where git is the local ref of its head. */
 function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBranch = "main", branches = {} }) {
   const sha = (ref) => git(clone, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
   const filesCache = new Map();
-  // comments: what was added to a pull request. readOnly: the token may read and not write, as GitHub answers then. broken: a write fails.
-  const state = { calls: 0, rateLimited: false, comments: [], readOnly: false, broken: false };
+  // reviews: what was submitted to a pull request. me: the login the token belongs to. readOnly: the token may
+  // read and not write, as GitHub answers then. broken: a write fails.
+  const state = { calls: 0, rateLimited: false, reviews: [], me: "reviewer", readOnly: false, broken: false };
 
   function files(baseSha, headSha) {
     const key = `${baseSha}..${headSha}`;
@@ -47,6 +48,7 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
     return {
       number: p.number, title: p.title, user: p.user, draft: !!p.draft, updated_at: p.updated_at, state: "open",
       html_url: `https://github.com/${owner}/${repo}/pull/${p.number}`, mergeable_state: p.mergeable_state || "clean",
+      requested_reviewers: p.requested_reviewers || [], requested_teams: p.requested_teams || [],
       head: { ref: (p.head && p.head.ref) || "", sha: head }, base: { ref: defaultBranch, sha: mb },
     };
   }
@@ -70,6 +72,7 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
       state.calls++;
       if (state.rateLimited) return json(403, { message: "API rate limit exceeded" }, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 1800) });
       const path = decodeURIComponent(url.pathname), q = url.searchParams;
+      if (path === "/user") return route.request().headers().authorization ? json(200, { login: state.me }) : json(401, { message: "Requires authentication" });
       const root = `/repos/${owner}/${repo}`;
       if (!path.startsWith(root)) return json(404, { message: "Not Found" });
       const rest = path.slice(root.length);
@@ -100,21 +103,31 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
       }
       if (/^\/commits\/[0-9a-f]{40}\/check-runs$/.test(rest)) return json(200, { total_count: 1, check_runs: [{ status: "completed", conclusion: "success" }] });
       const method = route.request().method();
-      if (method === "POST" || method === "PATCH") {
+      if (method === "POST" || method === "PUT") {
         if (!route.request().headers().authorization) return json(401, { message: "Requires authentication" });
         if (state.readOnly) return json(403, { message: "Resource not accessible by personal access token" });
         if (state.broken) return json(500, { message: "Server Error" });
-        const body = (route.request().postDataJSON() || {}).body;
-        if (method === "POST" && (m = /^\/issues\/(\d+)\/comments$/.exec(rest)) && pulls.some((x) => x.number === Number(m[1]))) {
-          const id = 1000 + state.comments.length;
-          const made = { id, body, number: Number(m[1]), html_url: `https://github.com/${owner}/${repo}/pull/${m[1]}#issuecomment-${id}` };
-          state.comments.push(made);
-          return json(201, made);
+        const sent = route.request().postDataJSON() || {};
+        if (method === "POST" && (m = /^\/pulls\/(\d+)\/reviews$/.exec(rest))) {
+          const p = pulls.find((x) => x.number === Number(m[1]));
+          if (!p) return json(404, { message: "Not Found" });
+          // GitHub takes no approval and no request for changes from the author of the pull request
+          if (sent.event !== "COMMENT" && p.user && p.user.login === state.me) {
+            return json(422, { message: "Unprocessable Entity", errors: [sent.event === "APPROVE" ? "Can not approve your own pull request" : "Can not request changes on your own pull request"] });
+          }
+          const id = 5000 + state.reviews.length;
+          const made = {
+            id, body: sent.body, event: sent.event, commit_id: sent.commit_id, number: p.number, user: { login: state.me },
+            state: { APPROVE: "APPROVED", REQUEST_CHANGES: "CHANGES_REQUESTED", COMMENT: "COMMENTED" }[sent.event],
+            html_url: `https://github.com/${owner}/${repo}/pull/${p.number}#pullrequestreview-${id}`,
+          };
+          state.reviews.push(made);
+          return json(200, made);
         }
-        if (method === "PATCH" && (m = /^\/issues\/comments\/(\d+)$/.exec(rest))) {
-          const made = state.comments.find((x) => x.id === Number(m[1]));
+        if (method === "PUT" && (m = /^\/pulls\/(\d+)\/reviews\/(\d+)$/.exec(rest))) {
+          const made = state.reviews.find((x) => x.id === Number(m[2]) && x.number === Number(m[1]));
           if (!made) return json(404, { message: "Not Found" });
-          made.body = body;
+          made.body = sent.body;
           return json(200, made);
         }
         return json(404, { message: "Not Found" });

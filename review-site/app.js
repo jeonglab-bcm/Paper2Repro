@@ -67,7 +67,26 @@ async function apiAll(path, { pages = 30, tag = "" } = {}) {
   }
   return out;
 }
-/** A change on GitHub with the reviewer's token: a comment added (POST) or edited (PATCH). Gives GitHub's answer. */
+/** The reader's GitHub login as the browser keeps it with the token; "" with no token, or before GitHub was asked. */
+const meKept = () => (token() ? (store.get("rv:me") || {}).login || "" : "");
+/**
+ * The login the token belongs to, asked of GitHub once (1 request) and kept until the token changes.
+ * "" with no token, or when GitHub does not say: the page then goes on without it.
+ */
+async function whoAmI() {
+  if (!token()) return "";
+  const kept = store.get("rv:me");
+  if (kept) return kept.login || "";
+  let login = "";
+  try {
+    login = String((await api("/user")).login || "");
+  } catch {
+    /* a token that does not say who it is */
+  }
+  store.set("rv:me", { login });
+  return login;
+}
+/** A change on GitHub with the reviewer's token: a review submitted (POST) or its text edited (PUT). Gives GitHub's answer. */
 async function write(method, path, body) {
   let res;
   try {
@@ -119,7 +138,7 @@ async function loadReview(link) {
     baseSha = pr.base.sha;
     review = {
       label: `#${pr.number}`, title: pr.title, url: pr.html_url, number: pr.number, branch: pr.head.ref,
-      author: pr.user && pr.user.login, updated: pr.updated_at, draft: pr.draft, sha: pr.head.sha,
+      author: pr.user && pr.user.login, updated: pr.updated_at, draft: pr.draft, sha: pr.head.sha, reviewers: core.reviewersOf(pr),
       notes: pr.mergeable_state === "dirty" ? [`Conflicts with ${pr.base.ref}. It needs an update before it can merge.`] : [],
     };
   } else {
@@ -252,6 +271,7 @@ async function render() {
   window.scrollTo(0, 0);
   try {
     const { review, c } = await loadReview(link);
+    review.me = await whoAmI(); // whose review requests are "yours", and whether the pull request is the reader's own
     if (shown !== mine && shown !== location.search) return; // the reader moved on
     const ctx = {
       img: (path) => rawUrl(c, path),
@@ -281,8 +301,8 @@ const sumKey = (repo, label) => `rv:sum:${repo}:${label}`;
 const sentKey = (repo, label) => `rv:sent:${repo}:${label}`;
 /**
  * Whether the review went out, and whether a decision changed after that. how is "added" when the
- * page put it on the pull request as a comment (kept: {at, sig, id, url, sha}), and "copied" when
- * it went to the clipboard ({at, sig}): the page cannot know that it was pasted.
+ * page submitted it as a review of the pull request (kept: {at, sig, id, url, sha, state}), and
+ * "copied" when it went to the clipboard ({at, sig}): the page cannot know that it was pasted.
  */
 function sentOf(repo, label, keys) {
   const sent = store.get(sentKey(repo, label));
@@ -338,7 +358,7 @@ async function home(repo) {
   const run = (home.run = {}); // a later visit of the first page takes over
   const draw = (pulls, error) => {
     const typed = app.querySelector(".paste input")?.value || "";
-    mount(core.homeHtml({ repo, pulls, recent: store.get("rv:recent") || [], error, mine: pulls ? standings(repo, pulls) : undefined }));
+    mount(core.homeHtml({ repo, pulls, recent: store.get("rv:recent") || [], error, mine: pulls ? standings(repo, pulls) : undefined, me: meKept() }));
     const input = app.querySelector(".paste input");
     input.value = typed;
     if (window.matchMedia("(pointer: fine)").matches) input.focus();
@@ -347,7 +367,7 @@ async function home(repo) {
   if (!repo) return;
   const mine = shown;
   const listPath = `/repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=50`;
-  const sigOf = (list) => list.map((p) => [p.number, p.head && p.head.sha, p.title, p.draft].join(" ")).join("|");
+  const sigOf = (list) => list.map((p) => [p.number, p.head && p.head.sha, p.title, p.draft, core.reviewersOf(p).join(",")].join(" ")).join("|");
   let pulls;
   try {
     pulls = await api(listPath, { fresh: true });
@@ -381,10 +401,12 @@ async function home(repo) {
   };
   const redraw = () => {
     const slot = app.querySelector(".pulls");
-    slot.innerHTML = core.pullsHtml(repo, pulls, standings(repo, pulls));
+    slot.innerHTML = core.pullsHtml(repo, pulls, standings(repo, pulls), meKept());
     slot.querySelectorAll(".rcard").forEach(fill);
   };
   app.querySelectorAll(".rcard").forEach(fill);
+  // with a token, GitHub says who reads (asked once): then the cards name the reader's own review requests
+  if (token() && !store.get("rv:me")) whoAmI().then((login) => { if (login && home.run === run && app.querySelector(".pulls")) redraw(); });
   pulls.forEach(async (p) => {
     const sha = p.head && p.head.sha, at = `${repo}@${sha}`;
     const id = /PMC\d+/i.exec(`${p.title} ${p.head && p.head.ref}`);
@@ -486,16 +508,31 @@ function wireReview(review, c, summary) {
   const rest = app.querySelector(".restbar");
   // the decisions at a glance, apart by how they stand; a name goes to its figure or table
   const maps = [...app.querySelectorAll(".rmap")];
-  // The review goes out with one button, named for what it does next. Add review: the page puts it on the
-  // pull request as a comment, or copies it where it may not write. Update review: the comment it added at
-  // this commit is edited. Open review: that comment is as the decisions are now. A branch has no pull request.
+  // The review goes out with one button, named for what it does next. With a token it is submitted as a review
+  // of the pull request, and the name says what the review does there: Approve, Request changes or Comment on
+  // GitHub. Update review: the text of the review the page submitted at this commit is edited. Open review: that
+  // review is as the decisions are now. Add review: no token, so it is copied. A branch has no pull request.
   const sends = [...app.querySelectorAll(".send")], sendNotes = [...app.querySelectorAll(".sendnote")];
   const sigNow = () => core.reviewSig(summary.keys, (k) => said(repo, k));
   const sentNow = () => store.get(sentKey(repo, review.label)) || {};
+  // GitHub takes no approval and no request for changes from the author of a pull request: theirs is a comment
+  let own = !!review.me && !!review.author && review.me.toLowerCase() === review.author.toLowerCase();
+  const eventNow = () => (own ? "COMMENT" : core.reviewEvent(summary.units, (k) => said(repo, k)));
   const paintSend = () => {
-    const s = sentNow(), here = !!review.number && !!s.url && s.sha === review.sha;
-    const label = !review.number ? "Copy review" : here && s.sig === sigNow() ? "Open review" : here && token() ? "Update review" : "Add review";
-    sends.forEach((b) => { if (!b.disabled && !b.classList.contains("flash")) b.textContent = label; });
+    const s = sentNow(), here = !!review.number && !!s.url && s.sha === review.sha, event = eventNow();
+    const label = !review.number ? ["Copy review"] : !token() ? ["Add review"] : here && s.sig === sigNow() ? ["Open review"]
+      : here && s.state === event ? ["Update review"] : [core.EVENT_LABEL[event], " on GitHub"];
+    sends.forEach((b) => {
+      if (b.disabled || b.classList.contains("flash")) return;
+      b.textContent = label[0];
+      if (label[1]) { // where it goes is left out where the bar is narrow
+        const where = document.createElement("span");
+        where.className = "where";
+        where.textContent = label[1];
+        b.append(where);
+      }
+      b.dataset.event = label[1] ? event : "";
+    });
   };
   /** What happened to the review, said by the button: text, a link to GitHub, and how to let the page add it itself. */
   const say = (text, link = null, hint = "") => sendNotes.forEach((n) => {
@@ -508,7 +545,7 @@ function wireReview(review, c, summary) {
     if (hint) {
       const b = document.createElement("button");
       Object.assign(b, { type: "button", className: "linkish token", textContent: hint === "add" ? "Add a GitHub token" : "Change the token" });
-      n.append(" ", b, hint === "add" ? " that may write, and the page adds the comment itself." : " for one with Pull requests: write, and the page adds the comment itself.");
+      n.append(" ", b, hint === "add" ? " that may write, and the page submits the review itself." : " for one with Pull requests: write, and the page submits the review itself.");
     }
     n.hidden = !text;
   });
@@ -712,17 +749,27 @@ function wireReview(review, c, summary) {
     b.classList.add("flash");
     setTimeout(() => { b.classList.remove("flash"); paintSend(); }, 1600);
   };
-  /** The review as a comment on the pull request: the one the page added at this commit is edited, or a new one is added. */
-  const postReview = async (text, id) => {
-    const issues = `/repos/${c.owner}/${c.repo}/issues`;
+  /**
+   * The review as a review of the pull request, at the commit that was read. The text of the one the page
+   * submitted at this commit with the same event is edited (id); otherwise a new one is submitted: what a
+   * submitted review does (approve, request changes, comment) cannot be changed on GitHub.
+   */
+  const postReview = async (text, event, id) => {
+    const reviews = `/repos/${c.owner}/${c.repo}/pulls/${review.number}/reviews`;
     if (id) {
       try {
-        return { ...(await write("PATCH", `${issues}/comments/${id}`, { body: text })), updated: true };
+        return { ...(await write("PUT", `${reviews}/${id}`, { body: text })), event, updated: true };
       } catch (err) {
-        if (err.status !== 404) throw err; // the comment is gone: a new one
+        if (err.status !== 404) throw err; // the review is gone: a new one
       }
     }
-    return write("POST", `${issues}/${review.number}/comments`, { body: text });
+    try {
+      return { ...(await write("POST", reviews, { commit_id: review.sha, body: text, event })), event };
+    } catch (err) {
+      // 422 to an approval or a request for changes: the pull request is the reader's own. Then it is a comment.
+      if (err.status !== 422 || event === "COMMENT") throw err;
+      return { ...(await write("POST", reviews, { commit_id: review.sha, body: text, event: "COMMENT" })), event: "COMMENT", asAuthor: true };
+    }
   };
   sends.forEach((send) => send.addEventListener("click", async () => {
     const text = reviewText(), sig = sigNow(), s = sentNow(), pull = `#${review.number}`;
@@ -735,7 +782,7 @@ function wireReview(review, c, summary) {
       return ok;
     };
     if (!review.number) return void (await copy(), say(""));
-    const here = !!s.url && s.sha === review.sha;
+    const here = !!s.url && s.sha === review.sha, event = eventNow();
     if (here && s.sig === sig) {
       openTab(s.url);
       return say(`Your review is on ${pull} as it is here.`, { href: s.url, label: "Open it on GitHub" });
@@ -743,24 +790,28 @@ function wireReview(review, c, summary) {
     let why = "";
     if (token()) {
       sends.forEach((b) => { b.disabled = true; });
-      send.textContent = here ? "Updating…" : "Adding…";
+      const edits = here && s.state === event;
+      send.textContent = edits ? "Updating…" : "Submitting…";
       let made = null, failed = null;
       try {
-        made = await postReview(text, here ? s.id : null);
+        made = await postReview(text, event, edits ? s.id : null);
       } catch (err) {
         failed = err;
       }
       sends.forEach((b) => { b.disabled = false; });
       if (made) {
-        keep({ id: made.id, url: made.html_url, sha: review.sha });
-        flash(send, made.updated ? "Updated" : "Added");
+        if (made.asAuthor) own = true;
+        keep({ id: made.id, url: made.html_url, sha: review.sha, state: made.event });
+        flash(send, made.updated ? "Updated" : "Submitted");
         openTab(made.html_url);
-        return say(made.updated ? `Your comment on ${pull} is updated.` : `Your review is added to ${pull}.`, { href: made.html_url, label: "Open it on GitHub" });
+        const does = made.event !== "COMMENT" ? `and ${core.EVENT_DOES[made.event]}`
+          : own ? "as a comment: GitHub takes no approval and no request for changes from the author of a pull request" : "as a comment: not everything is decided yet";
+        return say(made.updated ? `Your review on ${pull} is updated.` : `Your review is on ${pull} ${does}.`, { href: made.html_url, label: "Open it on GitHub" });
       }
       paintSend();
       // 401: the token is refused. 403, 404: it may read and not write. Then the review is copied, as with no token.
       if (![401, 403, 404].includes(failed.status)) return say(`${failed instanceof GitHubError ? failed.message : "GitHub could not be asked."} The review is not added.`);
-      why = failed.status === 401 ? "GitHub refused the token" : "The token may not comment on this repository";
+      why = failed.status === 401 ? "GitHub refused the token" : "The token may not review on this repository";
     }
     // no token, or one that may not write: the review is copied, and the pull request opens for it to be pasted
     const box = `${review.url}#issuecomment-new`;
@@ -939,19 +990,20 @@ function tokenDialog() {
     d.insertAdjacentHTML("beforeend",
       "<h3>GitHub token</h3><p class=\"note\">Without a token GitHub allows this page 60 requests an hour from your network. " +
       "A token lifts that, and lets the page read private repositories you can read. It stays in this browser and goes only to api.github.com. " +
-      "A fine-grained token with read-only access is enough to read. For Add review to put your review on the pull request itself, " +
-      "the token needs Pull requests: Read and write for that repository; with less, the review is copied for you to paste.</p>" +
+      "A fine-grained token with read-only access is enough to read. For the page to submit your review to the pull request itself " +
+      "(approve, request changes or comment), the token needs Pull requests: Read and write for that repository; with less, the review is copied for you to paste.</p>" +
       '<input type="password" class="tok" autocomplete="off" placeholder="github_pat_…" aria-label="GitHub token">' +
       '<p class="row"><button type="button" class="btn save">Save</button> <button type="button" class="btn forget">Remove the token</button></p>');
     d.querySelector(".tok").value = token();
     d.querySelector(".save").addEventListener("click", () => {
       const v = d.querySelector(".tok").value.trim();
       if (v) store.set("rv:token", v); else store.del("rv:token");
+      store.del("rv:me");
       cache.clear();
       d.close();
       render();
     });
-    d.querySelector(".forget").addEventListener("click", () => { store.del("rv:token"); cache.clear(); d.close(); render(); });
+    d.querySelector(".forget").addEventListener("click", () => { store.del("rv:token"); store.del("rv:me"); cache.clear(); d.close(); render(); });
   });
 }
 function openLink(text) {

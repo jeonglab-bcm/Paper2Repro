@@ -58,17 +58,34 @@ page shows what a reviewer has to judge:
    verdict and the reason. **Next not decided** in the bar at the bottom jumps to the next
    one, and at the end one button accepts everything you left open as the pull request says.
    Decisions stay in your browser.
-4. **Add review** puts your decisions on the pull request as one comment, the verdicts you want
+4. The button at the bottom sends your review to the pull request, the verdicts you want
    changed first (`Fig. 2: Partly → Agrees. <your comment>`), and opens it on GitHub in a new
    tab.
    - **With a GitHub token that may write** (fine-grained: Pull requests, read and write) the
-     page adds the comment itself. The button then says **Open review** while the comment is as
-     your decisions are, and **Update review** once a decision changed: that edits the same
-     comment, so the pull request gets one comment for each commit you reviewed, not one for
-     each press.
-   - **With no token, or one that may only read,** the page copies the review and opens the
-     pull request at its comment box: paste it there.
-   - A branch with no pull request has nothing to comment on: the button is **Copy review**.
+     page submits a review of the pull request, at the commit you read, so GitHub takes you off
+     the list of those it waits for. The button is named for what the review does, before you
+     press it:
+
+     | Button | When | On GitHub |
+     | --- | --- | --- |
+     | **Approve on GitHub** | all decided, all as the pull request says | an approval |
+     | **Request changes on GitHub** | a verdict is yours and not the pull request's, or one is Not OK | changes requested |
+     | **Comment on GitHub** | something is not decided yet, or the pull request is your own | a comment |
+
+     An approval says that the pull request's verdicts are right, also where a verdict is
+     Differs. It does not say that the paper came back. Where a repository asks for an approval
+     before a merge, this approval counts.
+   - **After that** the button says **Open review** while the review is as your decisions are,
+     and **Update review** once a decision changed and the review still does the same: that
+     edits its text. GitHub does not let a submitted review change from a comment to an
+     approval, or from an approval to a request for changes, so then the page submits a new
+     review.
+   - **Your own pull request.** GitHub takes no approval from the author of a pull request, so
+     the review of your own is a comment. The page knows whose it is from the token; where it
+     does not, GitHub refuses the approval and the page submits the comment.
+   - **With no token, or one that may only read,** the button is **Add review**: the page
+     copies the review and opens the pull request at its comment box, where you paste it.
+   - A branch with no pull request has nothing to review: the button is **Copy review**.
 
 ## The first page: where each pull request stands
 
@@ -83,8 +100,12 @@ The open pull requests are in three groups, by your decisions in this browser:
 | **Changes requested** | Changes requested | all decided, and at least one verdict is yours and not the pull request's, or is Not OK; "2 to change: Fig. 1, Fig. 3" |
 | **Accepted** | Accepted | all decided, all as the pull request says |
 
+Each card names who GitHub says is asked to review ("Review asked of alice and bob"). With a
+token the page knows who you are (1 request, asked once): your own review requests read "you",
+and their cards come first in each group.
+
 A card in the last two groups also says whether the review went out: **Review added** with the
-time when the page put it on the pull request, **Review copied** when it went to the clipboard,
+time when the page submitted it to the pull request, **Review copied** when it went to the clipboard,
 **Review not added yet**, or **Decisions changed since you added the review**. The page does not
 read the pull request's comments, so of a copied review it cannot know that you pasted it.
 
@@ -98,7 +119,7 @@ A review has its own address, `?r=owner/repo/pull/40`, to bookmark or send.
 
 A review is read at the commit the pull request has when you open it: the page asks GitHub each
 time, and does not take the answer from the browser's cache, which keeps GitHub's answers for a
-minute. The commit is in the bar at the top.
+minute. The commit is in the bar at the top, with who is asked to review.
 
 A page that stays open asks again when you come back to its tab or window, at most every 5
 minutes, or every minute with a GitHub token.
@@ -138,7 +159,7 @@ table fills the screen, with its verdict buttons below it.
   ("2 / 13") and how much is decided.
 - **The last card** says what is left, lists your decisions apart (not decided, to change,
   accepted; a name goes to its card), accepts the rest as the pull request says if you want, and
-  has **Add review**.
+  has the button that sends the review.
 - **Whole page** in the bar shows the page as on a computer; **Cards** in the bottom bar
   brings the cards back. The choice is remembered.
 
@@ -147,14 +168,14 @@ table fills the screen, with its verdict buttons below it.
 The site is static files. Your browser asks GitHub: the REST API for the pull request and its
 changed files (3 or 4 requests a review), and `raw.githubusercontent.com` for `results.json`,
 the pictures and the code. There is no server and no build for each pull request. The page
-writes to GitHub in one case only: your review, as a comment on the pull request, when you press
-**Add review** with a token that may write.
+writes to GitHub in one case only: your review, as a review of the pull request, when you press
+the button that sends it with a token that may write.
 
 - **Request limit.** Without a token GitHub allows 60 API requests an hour for each network
   address, which an office can share. Opening the first page is 1 request, a review 3 or 4 the
   first time and 1 after that while its commit is the same, and asking for a new commit is 1. **GitHub token** on the first page saves a token in your
   browser; it goes only to `api.github.com` and lifts the limit to 5,000. Read-only access is
-  enough to read; **Add review** needs Pull requests: read and write to add the comment itself.
+  enough to read; the page needs Pull requests: read and write to submit your review itself.
 - **Private repositories** need that token. This path is written but not tested.
 - **A branch** shows its first 300 changed files (GitHub's limit for a comparison). A pull
   request shows all of them.

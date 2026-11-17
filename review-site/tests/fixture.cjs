@@ -102,7 +102,8 @@ function makeRepo() {
   };
   return {
     dir, clone, push,
-    pulls: [{ number: 7, title: "Reproduce PMC1: a paper", user: { login: "someone" }, head: { ref: "paper" }, updated_at: "2026-11-09T00:00:00Z", git: "origin/paper" }],
+    pulls: [{ number: 7, title: "Reproduce PMC1: a paper", user: { login: "someone" }, head: { ref: "paper" }, updated_at: "2026-11-09T00:00:00Z", git: "origin/paper",
+      requested_reviewers: [{ login: "alice" }, { login: "Reviewer" }], requested_teams: [{ slug: "stats", name: "Stats team" }] }],
     branches: { side: "origin/side", paper: "origin/paper", "side/PMC1": null },
   };
 }
