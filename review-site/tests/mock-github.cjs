@@ -13,7 +13,8 @@ const TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "i
 function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBranch = "main", branches = {} }) {
   const sha = (ref) => git(clone, ["rev-parse", "--verify", `${ref}^{commit}`]).trim();
   const filesCache = new Map();
-  const state = { calls: 0, rateLimited: false };
+  // comments: what was added to a pull request. readOnly: the token may read and not write, as GitHub answers then. broken: a write fails.
+  const state = { calls: 0, rateLimited: false, comments: [], readOnly: false, broken: false };
 
   function files(baseSha, headSha) {
     const key = `${baseSha}..${headSha}`;
@@ -98,8 +99,28 @@ function makeMock({ clone, owner, repo, pulls, base = "origin/main", defaultBran
         return json(200, { merge_base_commit: { sha: mb }, commits: head === mb ? [] : [{ sha: head, commit: { author: { name, date } } }], files: files(mb, head).slice(0, 300) });
       }
       if (/^\/commits\/[0-9a-f]{40}\/check-runs$/.test(rest)) return json(200, { total_count: 1, check_runs: [{ status: "completed", conclusion: "success" }] });
-      if (rest === "/commits" && q.get("path")) {
-        const log = git(clone, ["log", `--max-count=${q.get("per_page") || 30}`, "--format=%H%x09%cI%x09%s", q.get("sha"), "--", q.get("path")]).split("\n").filter(Boolean);
+      const method = route.request().method();
+      if (method === "POST" || method === "PATCH") {
+        if (!route.request().headers().authorization) return json(401, { message: "Requires authentication" });
+        if (state.readOnly) return json(403, { message: "Resource not accessible by personal access token" });
+        if (state.broken) return json(500, { message: "Server Error" });
+        const body = (route.request().postDataJSON() || {}).body;
+        if (method === "POST" && (m = /^\/issues\/(\d+)\/comments$/.exec(rest)) && pulls.some((x) => x.number === Number(m[1]))) {
+          const id = 1000 + state.comments.length;
+          const made = { id, body, number: Number(m[1]), html_url: `https://github.com/${owner}/${repo}/pull/${m[1]}#issuecomment-${id}` };
+          state.comments.push(made);
+          return json(201, made);
+        }
+        if (method === "PATCH" && (m = /^\/issues\/comments\/(\d+)$/.exec(rest))) {
+          const made = state.comments.find((x) => x.id === Number(m[1]));
+          if (!made) return json(404, { message: "Not Found" });
+          made.body = body;
+          return json(200, made);
+        }
+        return json(404, { message: "Not Found" });
+      }
+      if (rest === "/commits") {
+        const log = git(clone, ["log", `--max-count=${q.get("per_page") || 30}`, "--format=%H%x09%cI%x09%s", q.get("sha"), ...(q.get("path") ? ["--", q.get("path")] : [])]).split("\n").filter(Boolean);
         return json(200, log.map((ln) => { const [sha, date, message] = ln.split("\t"); return { sha, commit: { message, author: { date }, committer: { date } } }; }));
       }
       if ((m = /^\/contents\/(.+)$/.exec(rest))) {

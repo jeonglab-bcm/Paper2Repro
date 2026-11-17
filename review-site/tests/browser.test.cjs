@@ -31,6 +31,7 @@ function serve(repo) {
 async function open(browser, mock, viewport = { width: 1280, height: 1000 }) {
   const ctx = await browser.newContext({ viewport, permissions: ["clipboard-read", "clipboard-write"] });
   await ctx.route(/^https:\/\/(api\.github\.com|raw\.githubusercontent\.com)\//, mock.handle);
+  await ctx.route(/^https:\/\/github\.com\//, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>GitHub</title>" }));
   const page = await ctx.newPage();
   // how the app asks GitHub: the cache mode of each request to the API
   await page.addInitScript(() => {
@@ -40,8 +41,17 @@ async function open(browser, mock, viewport = { width: 1280, height: 1000 }) {
   });
   page.errors = [];
   page.on("pageerror", (err) => page.errors.push(String(err)));
-  page.on("console", (m) => { if (m.type() === "error" && !/404|403/.test(m.text())) page.errors.push(m.text()); });
+  page.on("console", (m) => { if (m.type() === "error" && !/404|403|500/.test(m.text())) page.errors.push(m.text()); }); // the answers the tests ask the stand-in for
   return page;
+}
+/** Presses the button that sends the review, and gives the address of the tab it opens on GitHub. */
+async function sendAndSee(page, button = ".bar .send") {
+  const [tab] = await Promise.all([page.waitForEvent("popup"), page.locator(button).click()]);
+  await tab.waitForURL(/^https:\/\/github\.com\//);
+  const url = tab.url();
+  await tab.close();
+  await page.bringToFront();
+  return url;
 }
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const picturesLoaded = (page) => page.evaluate(async () => {
@@ -201,8 +211,12 @@ async function small(browser, base) {
     assert.equal(await page.locator(".phead .rmap .mfoot").count(), 0);
     await page.locator(".phead .rmap .m-same .mchip").click(); // a name goes to its table
     assert.equal(await page.evaluate(() => document.activeElement.dataset.title), "Table 1");
-    await page.locator(".bar .copy").click();
-    await page.waitForTimeout(150);
+    // no token: Add review copies the review and opens the pull request at its comment box, where it is pasted
+    assert.equal(await page.locator(".bar .send").textContent(), "Add review");
+    assert.equal(await sendAndSee(page), "https://github.com/o/r/pull/7#issuecomment-new");
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "The review is copied. Paste it in the comment box of #7. Open #7. Add a GitHub token that may write, and the page adds the comment itself.");
+    assert.equal(await page.locator(".bar .sendnote a").getAttribute("href"), "https://github.com/o/r/pull/7#issuecomment-new");
+    assert.equal(mock.state.comments.length, 0);
     const text = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(text, /### Review of PMC1 at [0-9a-f]{7} \(#7\)/);
     assert.match(text, /\*\*Verdicts to change \(1\)\*\*\n- \*\*Fig\. 1\*\*: Partly → Agrees\. The curve agrees within noise\./);
@@ -260,7 +274,8 @@ async function small(browser, base) {
     await page.locator(".rcard").click();
     await page.waitForSelector(".dbox");
     await page.locator('#code .dbox button[data-v="ok"]').click();
-    await page.locator(".bar .copy").click();
+    assert.equal(await page.locator(".bar .sendnote").isVisible(), false); // what the button said was of before this decision
+    await sendAndSee(page);
     await page.locator(".back").click();
     await page.waitForSelector(".rcard .vbar");
     assert.deepEqual(await groupsOf(page), [["Changes requested 1", ["#7 Changes requested"]]]);
@@ -373,18 +388,27 @@ async function small(browser, base) {
     await fig1.locator(".earlier").click();
     await fig1.locator(".versions button").first().waitFor();
     assert.match(await fig1.locator(".versions .vhead").textContent(), /^Ours was written 2 times\./);
-    const rows = await fig1.locator(".versions button").allTextContents();
-    assert.ok(/ more \d+ as it is now$/.test(rows[0]) && / paper$/.test(rows[1]), JSON.stringify(rows));
+    // each version is a picture, named by how many commits before the head of the pull request it was written
+    const behind = (sha) => Number(require("child_process").execFileSync("git", ["-C", repo.clone, "rev-list", "--count", `${sha}..origin/paper`]).toString());
+    const shas = await fig1.locator(".versions button").evaluateAll((bs) => bs.map((b) => b.dataset.sha));
+    const [now, first] = shas.map(behind);
+    assert.ok(first > now && first > 1, `${now} ${first}`);
+    assert.deepEqual(await fig1.locator(".versions .vago").allTextContents(), ["As it is now", `${first} commits ago`]);
+    const whens = await fig1.locator(".versions .vwhen").allTextContents();
+    assert.ok(whens[0].startsWith(now ? `Written ${now} commit${now === 1 ? "" : "s"} ago, ` : "Written by the latest commit, ") && !/commit/.test(whens[1]), JSON.stringify(whens));
+    assert.match((await fig1.locator(".versions .vmsg").allTextContents()).join(" | "), /^more \d+ \| paper$/);
+    await page.waitForFunction(() => [...document.querySelectorAll("#fig-1 .versions img")].every((i) => i.naturalWidth === 8));
+    assert.equal(await fig1.locator(".versions img").count(), 2);
     assert.equal(await fig1.locator(".earlier").isVisible(), false);
     await fig1.locator(".versions button").nth(1).click();
     assert.equal(await fig1.getAttribute("data-mode"), "was");
-    assert.match((await fig1.locator("figure:visible figcaption").allTextContents())[0], /^Ours on /);
+    assert.match((await fig1.locator("figure:visible figcaption").allTextContents())[0], new RegExp(`^Ours, ${first} commits ago \\(.+\\)$`));
     assert.equal(await fig1.locator('.versions button[aria-current="true"]').count(), 1);
-    assert.match(await fig1.locator('.versions button[aria-current="true"]').textContent(), / paper$/);
+    assert.equal(await fig1.locator('.versions button[aria-current="true"] .vmsg').textContent(), "paper");
     await page.waitForFunction(() => document.querySelector("#fig-1 figure.was img").naturalWidth === 8);
     await fig1.locator(".versions button").first().click(); // back to ours as it is now
     assert.equal(await fig1.getAttribute("data-mode"), "ours");
-    assert.match(await fig1.locator('.versions button[aria-current="true"]').textContent(), /as it is now$/);
+    assert.equal(await fig1.locator('.versions button[aria-current="true"] .vago').textContent(), "As it is now");
     await fig1.locator('.modes button[data-m="side"]').click();
     assert.equal(await page.locator(".again:visible").count(), 1);
     assert.deepEqual([await page.locator("#fig-1 .dbox .state").textContent(), await page.locator(".bar .done").textContent()], ["You accept: Partly", "5"]);
@@ -568,9 +592,11 @@ async function small(browser, base) {
     await page.locator(".deckend .rest").click();
     assert.equal(await page.locator(".deckend .dsum").textContent(), "All 5 decided.");
     assert.equal(await page.locator(".deckend .dfirst").isVisible(), false);
-    await page.locator(".deckend .copy").click();
-    await page.waitForTimeout(150);
-    assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
+    // a token is saved by now and it may write: the page adds the review to the pull request, and opens it there
+    assert.equal(await sendAndSee(page, ".deckend .send"), "https://github.com/o/r/pull/7#issuecomment-1000");
+    assert.equal(mock.state.comments.length, 1);
+    assert.match(mock.state.comments[0].body, /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*: Draw it\./);
+    assert.equal(await page.locator(".deckend .sendnote").textContent(), "Your review is added to #7. Open it on GitHub.");
     // the last card lists the decisions apart, and a name goes to its card
     assert.deepEqual(await page.locator(".deckend .rmap .m-change .mchip").allTextContents(), ["Fig. 2: Not OK with a comment"]);
     await page.locator(".deckend .rmap .m-change .mchip").click();
@@ -601,6 +627,75 @@ async function small(browser, base) {
       await page.waitForSelector(q ? ".dbox" : ".rcard", { state: q ? "attached" : "visible" });
       assert.equal(await overflow(page), 0, q || "first page");
     }
+  });
+
+  await step("with a token that may write, the review is added to the pull request as a comment, and edited there", async () => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.goto(base + "?r=o/r/pull/7");
+    await page.waitForSelector(".dbox", { state: "attached" });
+    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("rv:o/r:") || k.startsWith("rv:sent:")) localStorage.removeItem(k); });
+    mock.state.comments.length = 0;
+    await page.reload();
+    await page.waitForSelector("#fig-1 .dbox");
+    const label = () => page.locator(".bar .send").textContent(), settled = (text) => page.waitForFunction((t) => document.querySelector(".bar .send").textContent === t, text);
+    const foot = () => page.locator(".phead .rmap .mfoot").textContent();
+    await page.locator('#fig-1 .dbox button[data-v="same"]').click();
+    assert.equal(await label(), "Add review");
+    assert.equal(await sendAndSee(page), "https://github.com/o/r/pull/7#issuecomment-1000");
+    assert.equal(mock.state.comments.length, 1);
+    assert.match(mock.state.comments[0].body, /^### Review of PMC1 at [0-9a-f]{7} \(#7\)\n\n\*\*Accepted \(1\):\*\* Fig\. 1 \(Partly\)/);
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "Your review is added to #7. Open it on GitHub.");
+    assert.equal(await page.locator(".bar .sendnote a").getAttribute("href"), "https://github.com/o/r/pull/7#issuecomment-1000");
+    assert.match(await foot(), /^Review added .+\. Nothing changed since\.$/);
+    // the comment is as the decisions are: the button opens it, and adds no other
+    await settled("Open review");
+    assert.equal(await sendAndSee(page), "https://github.com/o/r/pull/7#issuecomment-1000");
+    assert.equal(mock.state.comments.length, 1);
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "Your review is on #7 as it is here. Open it on GitHub.");
+    // a decision more: the comment the page added is edited, there is still one
+    await page.locator('#i-table1 + .dbox button[data-v="same"]').click();
+    assert.equal(await label(), "Update review");
+    assert.match(await foot(), /^Your decisions changed since you added the review \(.+\)\.$/);
+    assert.equal(await sendAndSee(page), "https://github.com/o/r/pull/7#issuecomment-1000");
+    assert.equal(mock.state.comments.length, 1);
+    assert.match(mock.state.comments[0].body, /\*\*Accepted \(2\):\*\* Fig\. 1 \(Partly\); Table 1 \(Differs\)/);
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "Your comment on #7 is updated. Open it on GitHub.");
+    await settled("Open review");
+    // the first page says that it is on the pull request
+    await page.locator(".restbar .rest").click();
+    await sendAndSee(page);
+    await page.locator(".back").click();
+    await page.waitForSelector(".rcard .vbar");
+    assert.match(await page.locator(".rcard .rsent").textContent(), /^Review added /);
+    // a token that may read and not write: the review is copied, as with no token, and the page says why
+    await page.locator(".rcard").click();
+    await page.waitForSelector("#fig-1 .dbox");
+    mock.state.readOnly = true;
+    await page.locator('#fig-2 .dbox button[data-v="no"]').click();
+    assert.equal(await label(), "Update review");
+    assert.equal(await sendAndSee(page), "https://github.com/o/r/pull/7#issuecomment-new");
+    mock.state.readOnly = false;
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "The token may not comment on this repository, so the review is copied. Paste it in the comment box of #7. Open #7. Change the token for one with Pull requests: write, and the page adds the comment itself.");
+    assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\*\*Not OK \(1\)\*\*\n- \*\*Fig\. 2\*\*/);
+    assert.doesNotMatch(mock.state.comments[0].body, /Not OK/);
+    assert.match(await foot(), /^Review copied .+\. Nothing changed since\.$/);
+    await settled("Add review");
+    // GitHub does not answer: nothing is added and nothing is copied, and the page says so
+    mock.state.broken = true;
+    await page.locator('#fig-2 .dbox textarea').fill("Draw it.");
+    await page.locator(".bar .send").click();
+    await page.waitForFunction(() => /The review is not added\.$/.test(document.querySelector(".bar .sendnote").textContent));
+    mock.state.broken = false;
+    assert.equal(await page.locator(".bar .sendnote").textContent(), "GitHub answered 500. The review is not added.");
+    assert.equal(await label(), "Add review");
+    // a branch has no pull request to comment on: its review is copied
+    await page.goto(base + "?r=o/r/tree/side");
+    await page.waitForSelector(".dbox");
+    assert.equal(await label(), "Copy review");
+    await page.locator(".bar .send").click();
+    await page.waitForFunction(() => document.querySelector(".bar .send").textContent === "Copied");
+    assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^### Review of side at /);
+    assert.equal(mock.state.comments.length, 1);
   });
 
   assert.deepEqual(page.errors, []);

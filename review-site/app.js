@@ -67,6 +67,20 @@ async function apiAll(path, { pages = 30, tag = "" } = {}) {
   }
   return out;
 }
+/** A change on GitHub with the reviewer's token: a comment added (POST) or edited (PATCH). Gives GitHub's answer. */
+async function write(method, path, body) {
+  let res;
+  try {
+    res = await fetch(API + path, {
+      method, cache: "no-cache", body: JSON.stringify(body),
+      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
+    });
+  } catch {
+    throw new GitHubError(0, "Cannot reach GitHub.");
+  }
+  if (!res.ok) throw new GitHubError(res.status, `GitHub answered ${res.status}.`);
+  return res.json();
+}
 const rawUrl = (c, path) => `${RAW}/${c.owner}/${c.repo}/${c.sha}/${core.encPath(path)}`;
 let rawWorks = true;
 /**
@@ -265,12 +279,16 @@ async function render() {
 
 const sumKey = (repo, label) => `rv:sum:${repo}:${label}`;
 const sentKey = (repo, label) => `rv:sent:${repo}:${label}`;
-/** Whether the review was copied for the pull request, and whether a decision changed after that. */
+/**
+ * Whether the review went out, and whether a decision changed after that. how is "added" when the
+ * page put it on the pull request as a comment (kept: {at, sig, id, url, sha}), and "copied" when
+ * it went to the clipboard ({at, sig}): the page cannot know that it was pasted.
+ */
 function sentOf(repo, label, keys) {
   const sent = store.get(sentKey(repo, label));
   if (!sent) return { state: "no" };
   const when = new Date(sent.at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  return { state: sent.sig === core.reviewSig(keys, (k) => said(repo, k)) ? "yes" : "stale", when };
+  return { state: sent.sig === core.reviewSig(keys, (k) => said(repo, k)) ? "yes" : "stale", when, how: sent.url ? "added" : "copied" };
 }
 
 /**
@@ -468,11 +486,38 @@ function wireReview(review, c, summary) {
   const rest = app.querySelector(".restbar");
   // the decisions at a glance, apart by how they stand; a name goes to its figure or table
   const maps = [...app.querySelectorAll(".rmap")];
+  // The review goes out with one button, named for what it does next. Add review: the page puts it on the
+  // pull request as a comment, or copies it where it may not write. Update review: the comment it added at
+  // this commit is edited. Open review: that comment is as the decisions are now. A branch has no pull request.
+  const sends = [...app.querySelectorAll(".send")], sendNotes = [...app.querySelectorAll(".sendnote")];
+  const sigNow = () => core.reviewSig(summary.keys, (k) => said(repo, k));
+  const sentNow = () => store.get(sentKey(repo, review.label)) || {};
+  const paintSend = () => {
+    const s = sentNow(), here = !!review.number && !!s.url && s.sha === review.sha;
+    const label = !review.number ? "Copy review" : here && s.sig === sigNow() ? "Open review" : here && token() ? "Update review" : "Add review";
+    sends.forEach((b) => { if (!b.disabled && !b.classList.contains("flash")) b.textContent = label; });
+  };
+  /** What happened to the review, said by the button: text, a link to GitHub, and how to let the page add it itself. */
+  const say = (text, link = null, hint = "") => sendNotes.forEach((n) => {
+    n.textContent = text;
+    if (link) {
+      const a = document.createElement("a");
+      Object.assign(a, { href: link.href, target: "_blank", rel: "noopener", textContent: link.label });
+      n.append(" ", a, ".");
+    }
+    if (hint) {
+      const b = document.createElement("button");
+      Object.assign(b, { type: "button", className: "linkish token", textContent: hint === "add" ? "Add a GitHub token" : "Change the token" });
+      n.append(" ", b, hint === "add" ? " that may write, and the page adds the comment itself." : " for one with Pull requests: write, and the page adds the comment itself.");
+    }
+    n.hidden = !text;
+  });
   const paintMap = () => {
     const sent = sentOf(repo, review.label, summary.keys);
-    const foot = sent.state === "yes" ? `Review copied ${sent.when}. Nothing changed since.` : sent.state === "stale" ? `Your decisions changed since you copied the review (${sent.when}).` : "";
+    const foot = sent.state === "yes" ? `Review ${sent.how} ${sent.when}. Nothing changed since.` : sent.state === "stale" ? `Your decisions changed since you ${sent.how} the review (${sent.when}).` : "";
     const html = core.mapHtml(summary.units, (k) => said(repo, k), foot);
     maps.forEach((m) => { m.innerHTML = html; });
+    paintSend();
   };
   maps.forEach((m) => m.addEventListener("click", (ev) => {
     const chip = ev.target.closest("[data-key]"), box = chip && boxes.find((x) => x.dataset.key === chip.dataset.key);
@@ -481,6 +526,7 @@ function wireReview(review, c, summary) {
     else goTo(box);
   }));
   const progress = () => {
+    say(""); // what the button said about the review is of before this decision
     const left = open().length;
     const change = boxes.filter((x) => { const v = said(repo, x.dataset.key).v; return v && !agreesWithPr(x, v); }).length;
     app.querySelector(".bar .chg").textContent = change ? ` · ${change} to change` : "";
@@ -651,25 +697,75 @@ function wireReview(review, c, summary) {
     out.push(`_From the review page: ${location.href.split("#")[0]}_`);
     return out.join("\n");
   };
-  app.querySelectorAll(".copy").forEach((copy) => copy.addEventListener("click", () => {
-    const text = reviewText();
+  const copyText = (text) => (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false));
+  // the clipboard is closed to the page: the text, to copy by hand
+  const showText = (text) => dialog((d) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.readOnly = true;
+    d.append(ta);
+    setTimeout(() => ta.select());
+  });
+  const openTab = (url) => { const tab = window.open(url, "_blank"); if (tab) tab.opener = null; };
+  const flash = (b, label) => {
+    b.textContent = label;
+    b.classList.add("flash");
+    setTimeout(() => { b.classList.remove("flash"); paintSend(); }, 1600);
+  };
+  /** The review as a comment on the pull request: the one the page added at this commit is edited, or a new one is added. */
+  const postReview = async (text, id) => {
+    const issues = `/repos/${c.owner}/${c.repo}/issues`;
+    if (id) {
+      try {
+        return { ...(await write("PATCH", `${issues}/comments/${id}`, { body: text })), updated: true };
+      } catch (err) {
+        if (err.status !== 404) throw err; // the comment is gone: a new one
+      }
+    }
+    return write("POST", `${issues}/${review.number}/comments`, { body: text });
+  };
+  sends.forEach((send) => send.addEventListener("click", async () => {
+    const text = reviewText(), sig = sigNow(), s = sentNow(), pull = `#${review.number}`;
     // kept, so the first page can say whether this review went out and whether it changed after
-    store.set(sentKey(repo, review.label), { sig: core.reviewSig(summary.keys, (k) => said(repo, k)), sha: review.sha, at: new Date().toISOString() });
-    paintMap();
-    const done = () => {
-      copy.textContent = "Copied";
-      copy.classList.add("flash");
-      setTimeout(() => { copy.textContent = "Copy review"; copy.classList.remove("flash"); }, 1600);
+    const keep = (more = {}) => { store.set(sentKey(repo, review.label), { at: Date.now(), sig, ...more }); paintMap(); };
+    const copy = async () => {
+      const ok = await copyText(text);
+      if (ok) flash(send, "Copied"); else showText(text);
+      keep();
+      return ok;
     };
-    const fallback = () => dialog((d) => {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.readOnly = true;
-      d.append(ta);
-      setTimeout(() => ta.select());
-    });
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
-    else fallback();
+    if (!review.number) return void (await copy(), say(""));
+    const here = !!s.url && s.sha === review.sha;
+    if (here && s.sig === sig) {
+      openTab(s.url);
+      return say(`Your review is on ${pull} as it is here.`, { href: s.url, label: "Open it on GitHub" });
+    }
+    let why = "";
+    if (token()) {
+      sends.forEach((b) => { b.disabled = true; });
+      send.textContent = here ? "Updating…" : "Adding…";
+      let made = null, failed = null;
+      try {
+        made = await postReview(text, here ? s.id : null);
+      } catch (err) {
+        failed = err;
+      }
+      sends.forEach((b) => { b.disabled = false; });
+      if (made) {
+        keep({ id: made.id, url: made.html_url, sha: review.sha });
+        flash(send, made.updated ? "Updated" : "Added");
+        openTab(made.html_url);
+        return say(made.updated ? `Your comment on ${pull} is updated.` : `Your review is added to ${pull}.`, { href: made.html_url, label: "Open it on GitHub" });
+      }
+      paintSend();
+      // 401: the token is refused. 403, 404: it may read and not write. Then the review is copied, as with no token.
+      if (![401, 403, 404].includes(failed.status)) return say(`${failed instanceof GitHubError ? failed.message : "GitHub could not be asked."} The review is not added.`);
+      why = failed.status === 401 ? "GitHub refused the token" : "The token may not comment on this repository";
+    }
+    // no token, or one that may not write: the review is copied, and the pull request opens for it to be pasted
+    const box = `${review.url}#issuecomment-new`;
+    if (await copy()) openTab(box);
+    say(`${why ? `${why}, so the review is copied` : "The review is copied"}. Paste it in the comment box of ${pull}.`, { href: box, label: `Open ${pull}` }, why ? "change" : "add");
   }));
 
   // a picture of a private repository cannot come from raw.githubusercontent.com: ask the API
@@ -724,9 +820,17 @@ function wireReview(review, c, summary) {
       earlier.disabled = true;
       earlier.textContent = "Reading the versions…";
       try {
-        const commits = await api(`/repos/${c.owner}/${c.repo}/commits?path=${encodeURIComponent(earlier.dataset.path)}&sha=${c.sha}&per_page=12`);
+        const path = earlier.dataset.path, commits = `/repos/${c.owner}/${c.repo}/commits`;
+        // the commits that wrote the picture, and the commits of the change from its head back (asked once for
+        // the review): where a version is among them is how many commits ago it was
+        const [wrote, line] = await Promise.all([api(`${commits}?path=${encodeURIComponent(path)}&sha=${c.sha}&per_page=12`), api(`${commits}?sha=${c.sha}&per_page=100`).catch(() => [])]);
+        const at = new Map(line.map((x, i) => [x.sha, i]));
         const when = (iso) => new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-        versions.innerHTML = core.versionsHtml(commits.map((x) => ({ sha: x.sha, when: when((x.commit.committer || x.commit.author).date), message: x.commit.message.split("\n")[0] })));
+        versions.innerHTML = core.versionsHtml(wrote.map((x) => ({
+          sha: x.sha, when: when((x.commit.committer || x.commit.author).date), message: x.commit.message.split("\n")[0],
+          ago: at.has(x.sha) ? at.get(x.sha) : null, src: rawUrl({ ...c, sha: x.sha }, path),
+        })), { path, beyond: line.length >= 100 ? line.length : 0 });
+        versions.querySelectorAll("img").forEach(viaApi);
         versions.hidden = false;
         earlier.parentElement.hidden = true;
       } catch (err) {
@@ -737,7 +841,7 @@ function wireReview(review, c, summary) {
     if (versions) versions.addEventListener("click", (ev) => {
       const b = ev.target.closest("button[data-sha]");
       if (!b) return;
-      if (b.dataset.now) { delete v.dataset.flip; v.setMode("ours"); } else v.showWas(b.dataset.sha, `Ours on ${b.dataset.when}`);
+      if (b.dataset.now) { delete v.dataset.flip; v.setMode("ours"); } else v.showWas(b.dataset.sha, b.dataset.ago ? `Ours, ${b.dataset.ago} (${b.dataset.when})` : `Ours on ${b.dataset.when}`);
     });
     if (range) range.addEventListener("input", () => stage.style.setProperty("--cut", range.value + "%"));
     // the pictures there are, each of which can show alone and large: original, ours, overlap
@@ -835,7 +939,8 @@ function tokenDialog() {
     d.insertAdjacentHTML("beforeend",
       "<h3>GitHub token</h3><p class=\"note\">Without a token GitHub allows this page 60 requests an hour from your network. " +
       "A token lifts that, and lets the page read private repositories you can read. It stays in this browser and goes only to api.github.com. " +
-      "A fine-grained token with read-only access is enough.</p>" +
+      "A fine-grained token with read-only access is enough to read. For Add review to put your review on the pull request itself, " +
+      "the token needs Pull requests: Read and write for that repository; with less, the review is copied for you to paste.</p>" +
       '<input type="password" class="tok" autocomplete="off" placeholder="github_pat_…" aria-label="GitHub token">' +
       '<p class="row"><button type="button" class="btn save">Save</button> <button type="button" class="btn forget">Remove the token</button></p>');
     d.querySelector(".tok").value = token();

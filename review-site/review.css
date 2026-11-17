@@ -38,9 +38,10 @@ button, textarea, input { font: inherit; color: inherit; }
 .grow { flex: 1; }
 .progress { font-size: 14px; color: var(--muted); white-space: nowrap; }
 .progress b { color: var(--ink); }
-.btn, .copy { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
-.copy { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.copy.flash { background: var(--ours); border-color: var(--ours); color: #fff; }
+.btn, .send { display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.send { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.send.flash { background: var(--ours); border-color: var(--ours); color: #fff; }
+.send:disabled { opacity: .6; cursor: default; }
 
 /* paper head */
 .phead { padding: 22px 0 6px; }
@@ -256,7 +257,7 @@ details[open] > summary::before { content: "▾ "; }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); width: min(640px, 92vw); padding: 14px; }
 dialog textarea { width: 100%; height: 50vh; font: 13px var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
 @media (max-width: 520px) {
-  .btn, .copy { padding: 0 10px; font-size: 13px; }
+  .btn, .send { padding: 0 10px; font-size: 13px; }
   .top .wrap { gap: 2px 10px; }
   .station, .card, .nblock { padding-left: 12px; padding-right: 12px; }
   .hyps li { grid-template-columns: 1fr; }
@@ -493,13 +494,16 @@ body.deck .dbox .decide .mine .opts { flex: 1 1 100%; }
 .viewer[data-mode="was"] .stage, .viewer[data-flip] .stage { cursor: pointer; }
 .stage .was figcaption { background: #b4540a; }
 .hist { margin: 6px 0 0; font-size: 13px; }
-.versions { display: grid; gap: 2px; margin: 8px 0 0; font-size: 13px; max-width: 92ch; }
-.versions .vhead, .versions .only { color: var(--muted); margin-bottom: 2px; }
-.versions button { display: block; width: 100%; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: none; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-.versions button:hover { border-color: var(--line); }
-.versions button[aria-current="true"] { background: var(--soft); border-color: var(--line); }
-.versions b { font-weight: 600; margin-right: 6px; white-space: nowrap; }
-.versions .vnow { font-style: normal; color: var(--ours); font-weight: 600; margin-left: 4px; white-space: nowrap; }
+.versions { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; margin: 8px 0 0; font-size: 13px; }
+.versions .vhead, .versions .only { grid-column: 1 / -1; color: var(--muted); max-width: 92ch; }
+.versions button { display: flex; flex-direction: column; gap: 1px; width: 100%; height: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.versions button:hover { border-color: var(--muted); }
+.versions button[aria-current="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.versions img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #fff; border-radius: 4px; margin-bottom: 5px; }
+.versions .vago { font-weight: 600; }
+.versions .vnow { color: var(--ours); }
+.versions .vwhen, .versions .vmsg { color: var(--muted); font-size: 12px; }
+@media (max-width: 700px) { .versions { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); } }
 .dbox .again .wasthen { color: inherit; font-weight: 600; }
 body.deck .viewer[data-mode="was"] .stage figure.was { display: block; }
 body.deck .viewer[data-flip][data-mode] .stage figcaption { display: block; }
@@ -525,3 +529,8 @@ body.deck .viewer .hist, body.deck .viewer .versions { flex: none; }
 .ablock > .irow { border-bottom: 0; padding-bottom: 2px; }
 .ablock > details.info > .cause, .ablock > details.info > details { margin-bottom: 8px; }
 @media (max-width: 700px) { .aside { padding-left: 12px; padding-right: 12px; } }
+
+/* what the button did with the review: above the bar, and below the buttons of the last card */
+.bar .sendnote { position: absolute; right: max(16px, calc((100vw - 1080px) / 2 + 16px)); bottom: calc(100% + 8px); max-width: min(560px, calc(100vw - 32px)); margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: 0 4px 16px rgba(0, 0, 0, .2); }
+.sendnote a, .sendnote .linkish { color: inherit; font-size: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.deckend .sendnote { font-size: 13px; color: var(--muted); }

@@ -530,15 +530,38 @@ function viewerHtml(ctx, render, title) {
   return `<div class="viewer" data-mode="side" data-n="${n}">${buttons}${pick}<div class="stage">${layers}${slider}</div>${earlier}</div>`;
 }
 /**
- * The versions of one picture of ours, newest first: [{sha, when, message}], when being the
- * date as the reader's clock says it. The first is the one the page shows.
+ * How far back a commit is from the head of the change: "the latest commit", "1 commit ago",
+ * "3 commits ago". ago is its place among the commits of the change, the head being 0, or null
+ * when it is not among the ones that were read: then "more than 100 commits ago" where beyond
+ * says how many were read, and "" where the commits could not be read at all.
  */
-export function versionsHtml(versions) {
-  if (versions.length < 2) return `<li class="only">Ours has one version${versions[0] ? `, written ${esc(versions[0].when)}` : ""}. There is nothing earlier to compare it with.</li>`;
+export function agoText(ago, beyond = 0) {
+  if (ago === 0) return "the latest commit";
+  if (Number.isInteger(ago) && ago > 0) return `${ago} commit${ago === 1 ? "" : "s"} ago`;
+  return beyond ? `more than ${beyond} commits ago` : "";
+}
+/**
+ * The versions of one picture of ours, newest first, each as a picture with how long ago it was:
+ * [{sha, when, message, ago, src}]. when is the date as the reader's clock says it, ago as for
+ * agoText, src the address of the picture at that commit. The first is the one the page shows.
+ * path is the picture's path, for a picture that has to be read through the API.
+ */
+export function versionsHtml(versions, { path = "", beyond = 0 } = {}) {
+  const ago = (x) => agoText(x.ago, beyond);
+  const wrote = (x) => (x.ago === 0 ? "by the latest commit" : ago(x)); // after "written"
+  if (versions.length < 2) {
+    const x = versions[0];
+    return `<li class="only">Ours has one version${x ? `, written ${esc(x.when)}${wrote(x) ? ` (${wrote(x)})` : ""}` : ""}. There is nothing earlier to compare it with.</li>`;
+  }
   const cut = (text) => (text.length > 96 ? text.slice(0, 95).trimEnd() + "…" : text);
-  return `<li class="vhead">Ours was written ${versions.length} times. A version opens in the place of ours; a click on the picture goes between it and ours as it is now.</li>` +
-    versions.map((x, i) => `<li><button type="button" data-sha="${esc(x.sha)}" data-when="${esc(x.when)}"${i === 0 ? ' data-now="1" aria-current="true"' : ""}>` +
-      `<b>${esc(x.when)}</b> ${esc(cut(String(x.message || "")))}${i === 0 ? ' <i class="vnow">as it is now</i>' : ""}</button></li>`).join("");
+  return `<li class="vhead">Ours was written ${versions.length} times. Each picture is ours as that commit left it, the newest first. A click opens it in the place of ours; a click on the large picture goes between it and ours as it is now.</li>` +
+    versions.map((x, i) => {
+      const now = i === 0, name = now ? "As it is now" : ago(x) || x.when;
+      const when = now ? `Written ${wrote(x) ? `${wrote(x)}, ` : ""}${x.when}` : ago(x) ? x.when : "";
+      const pic = x.src ? `<img src="${esc(x.src)}" data-path="${esc(path)}" data-sha="${esc(x.sha)}" alt="Ours, ${esc(now ? "as it is now" : name)}" loading="lazy">` : "";
+      return `<li><button type="button" data-sha="${esc(x.sha)}" data-when="${esc(x.when)}" data-ago="${esc(now ? "" : ago(x))}"${now ? ' data-now="1" aria-current="true"' : ""}>${pic}` +
+        `<b class="vago${now ? " vnow" : ""}">${esc(name)}</b>${when ? `<span class="vwhen">${esc(when)}</span>` : ""}<span class="vmsg">${esc(cut(String(x.message || "")))}</span></button></li>`;
+    }).join("");
 }
 function stationHtml(ctx, folder, st) {
   const counts = {};
@@ -881,6 +904,8 @@ export function reviewHtml(review, ctx) {
   if (review.author) bits.push(esc(review.author));
   if (review.updated) bits.push(esc(review.updated.slice(0, 10)));
   const chips = (review.draft ? '<span class="chip">draft</span>' : "") + '<span class="ci"></span>';
+  // a pull request takes the review as a comment; a branch has none, so its review is copied
+  const send = review.number ? "Add review" : "Copy review";
   const html = `<header class="top"><div class="wrap"><a class="back" href="./">All reviews</a><span class="refline">${esc(review.repo)} · ${bits.join(" · ")} ${chips}</span></div></header>` +
     `<main class="wrap">${sections.join("")}<section id="code" class="sec"><h2>Code</h2>${shared.length ? "" : notes}${code}</section>` +
     '<div class="restbar" hidden><span class="restnote"></span><button type="button" class="btn rest">Accept these as the pull request says</button></div></main>' +
@@ -889,10 +914,10 @@ export function reviewHtml(review, ctx) {
     `<div class="deckend" hidden><div><p class="dhead">That was the last card</p><p class="dsum"></p>${MAP_SLOT}` +
     '<p><button type="button" class="btn dfirst">Go to the first one not decided</button></p>' +
     '<p><button type="button" class="btn rest">Accept these as the pull request says</button></p>' +
-    `<p><button type="button" class="copy">Copy review</button> <a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></p></div></div>` +
+    `<p><button type="button" class="send">${send}</button> <a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></p><p class="sendnote" role="status" hidden></p></div></div>` +
     '<div class="bar"><div class="wrap"><span class="progress"><b class="done">0</b> of <b class="all">0</b> decided<span class="chg"></span></span>' +
     '<button type="button" class="btn next">Next not decided</button><button type="button" class="btn dcards">Cards</button><span class="grow"></span>' +
-    `<button type="button" class="copy">Copy review</button><a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></div></div>`;
+    `<button type="button" class="send">${send}</button><a class="btn" href="${esc(review.url)}" rel="noopener">GitHub</a></div><p class="sendnote" role="status" hidden></p></div>`;
   const lines = Object.fromEntries(Object.entries(by).map(([cat, fs]) => [cat, fs.reduce((n, f) => n + f.added + f.deleted, 0)]));
   const units = summaries.flatMap((p) => p.units).concat(outside ? [outside] : []);
   return { html, summary: { papers: summaries, units, keys: units.map((u) => u.key), files: review.files.length, lines, sha: review.sha } };
@@ -913,7 +938,9 @@ function standingFacts(st) {
     out += `<span class="rchange">${st.change.length} to change${names.length ? `: ${esc(names.slice(0, 4).join(", "))}${more ? ` and ${more} more` : ""}` : ""}</span>`;
   }
   if (st.sent) {
-    const text = { yes: `Review copied ${st.sent.when}`, stale: "Decisions changed since you copied the review", no: "Review not copied yet" }[st.sent.state];
+    // added: the page put it on the pull request. copied: it went to the clipboard, and the page cannot know that it was pasted
+    const did = st.sent.how === "added" ? "added" : "copied";
+    const text = { yes: `Review ${did} ${st.sent.when}`, stale: `Decisions changed since you ${did} the review`, no: "Review not added yet" }[st.sent.state];
     out += `<span class="rsent${st.sent.state === "yes" ? "" : " todo"}">${esc(text)}</span>`;
   }
   return out;

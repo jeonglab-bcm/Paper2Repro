@@ -334,19 +334,34 @@ test("pictures of ours that results.json does not list are found by their names"
   assert.deepEqual(core.figureStations("PMC1", [listed], tree)[0].renders.map((r) => r.label), ["fig2a"]);
 });
 
-test("the versions of a picture of ours are listed, newest first, the one shown marked", () => {
+test("the versions of a picture of ours are shown as pictures, newest first, each with how many commits ago it was", () => {
   const { html } = core.reviewHtml(review(), ctx);
   assert.ok(html.includes('<button type="button" class="linkish earlier" data-path="PMC1/figure-reproduction/output/fig1_ours.png">Earlier versions of ours</button></p><ul class="versions" hidden></ul>'));
+  assert.deepEqual([0, 1, 3, null].map((n) => core.agoText(n)), ["the latest commit", "1 commit ago", "3 commits ago", ""]);
+  assert.equal(core.agoText(null, 100), "more than 100 commits ago"); // older than the commits that were read
+  const sha = (ch) => ch.repeat(40), src = (ch) => `https://raw.example/${sha(ch)}/fig1_ours.png`;
   const list = core.versionsHtml([
-    { sha: "c".repeat(40), when: "13 Nov, 16:18", message: "pin the kernel" },
-    { sha: "b".repeat(40), when: "13 Nov, 16:03", message: "redraw <Fig. 5>" },
-    { sha: "a".repeat(40), when: "9 Nov, 11:59", message: "x".repeat(120) },
-  ]);
-  assert.ok(list.startsWith('<li class="vhead">Ours was written 3 times.'));
-  assert.ok(list.includes(`<button type="button" data-sha="${"c".repeat(40)}" data-when="13 Nov, 16:18" data-now="1" aria-current="true"><b>13 Nov, 16:18</b> pin the kernel <i class="vnow">as it is now</i></button>`));
-  assert.ok(list.includes("<b>13 Nov, 16:03</b> redraw &lt;Fig. 5&gt;</button>") && !list.includes("<Fig. 5>"));
+    { sha: sha("c"), when: "13 Nov, 16:18", message: "pin the kernel", ago: 2, src: src("c") },
+    { sha: sha("b"), when: "13 Nov, 16:03", message: "redraw <Fig. 5>", ago: 5, src: src("b") },
+    { sha: sha("a"), when: "9 Nov, 11:59", message: "x".repeat(120), ago: null, src: src("a") },
+  ], { path: "PMC1/out/fig1_ours.png", beyond: 100 });
+  assert.ok(list.startsWith('<li class="vhead">Ours was written 3 times. Each picture is ours as that commit left it, the newest first.'));
+  // ours as it is now: marked, with when its commit was
+  assert.ok(list.includes(`<li><button type="button" data-sha="${sha("c")}" data-when="13 Nov, 16:18" data-ago="" data-now="1" aria-current="true">` +
+    `<img src="${src("c")}" data-path="PMC1/out/fig1_ours.png" data-sha="${sha("c")}" alt="Ours, as it is now" loading="lazy">` +
+    '<b class="vago vnow">As it is now</b><span class="vwhen">Written 2 commits ago, 13 Nov, 16:18</span><span class="vmsg">pin the kernel</span></button></li>'));
+  // an earlier one: its picture, named by how many commits ago it was
+  assert.ok(list.includes(`data-when="13 Nov, 16:03" data-ago="5 commits ago"><img src="${src("b")}" data-path="PMC1/out/fig1_ours.png" data-sha="${sha("b")}" alt="Ours, 5 commits ago" loading="lazy">` +
+    '<b class="vago">5 commits ago</b><span class="vwhen">13 Nov, 16:03</span><span class="vmsg">redraw &lt;Fig. 5&gt;</span></button>') && !list.includes("<Fig. 5>"));
+  assert.ok(list.includes('data-ago="more than 100 commits ago">') && list.includes('<b class="vago">more than 100 commits ago</b><span class="vwhen">9 Nov, 11:59</span>'));
   assert.ok(list.includes("x".repeat(95) + "…") && !list.includes("x".repeat(97)));
-  assert.equal(core.versionsHtml([{ sha: "a".repeat(40), when: "9 Nov, 11:59", message: "first" }]), '<li class="only">Ours has one version, written 9 Nov, 11:59. There is nothing earlier to compare it with.</li>');
+  // the head of the change wrote it
+  assert.ok(core.versionsHtml([{ sha: sha("c"), when: "13 Nov", message: "m", ago: 0 }, { sha: sha("b"), when: "12 Nov", message: "m", ago: 1 }]).includes('<span class="vwhen">Written by the latest commit, 13 Nov</span>'));
+  // the commits of the change could not be read: the dates alone, as before
+  const dates = core.versionsHtml([{ sha: sha("c"), when: "13 Nov", message: "m", ago: null }, { sha: sha("b"), when: "12 Nov", message: "n", ago: null }]);
+  assert.ok(dates.includes('<b class="vago vnow">As it is now</b><span class="vwhen">Written 13 Nov</span>') && dates.includes('data-ago=""><b class="vago">12 Nov</b><span class="vmsg">n</span>') && !dates.includes("<img"));
+  assert.equal(core.versionsHtml([{ sha: sha("a"), when: "9 Nov, 11:59", message: "first", ago: 3 }]), '<li class="only">Ours has one version, written 9 Nov, 11:59 (3 commits ago). There is nothing earlier to compare it with.</li>');
+  assert.equal(core.versionsHtml([{ sha: sha("a"), when: "9 Nov, 11:59", message: "first" }]), '<li class="only">Ours has one version, written 9 Nov, 11:59. There is nothing earlier to compare it with.</li>');
 });
 
 test("only the method and what is shared is shown as code", () => {
@@ -438,7 +453,7 @@ test("the review page lists the decisions apart: not decided, to change, accepte
 test("the first page keeps apart what is to review, where changes are requested and what is accepted", () => {
   const pull = (number) => ({ number, title: `Reproduce PMC${number}`, user: { login: "x" }, head: { sha: "abc", ref: "b" } });
   const mine = new Map([
-    [1, { state: "agreed", done: 3, all: 3, change: [], sent: { state: "yes", when: "12 Nov" } }],
+    [1, { state: "agreed", done: 3, all: 3, change: [], sent: { state: "yes", when: "12 Nov", how: "added" } }],
     [2, { state: "changes", done: 3, all: 3, change: ["Fig. 2", "Table <1>"], sent: { state: "no" } }],
     [3, { state: "started", done: 1, all: 3, change: [] }],
     [4, { state: "updated", done: 3, all: 3, change: ["Fig. 1"], again: 2 }],
@@ -451,8 +466,19 @@ test("the first page keeps apart what is to review, where changes are requested 
     ["Accepted 1", ["#1 Accepted"]],
   ]);
   const facts = (n) => new RegExp(`data-number="${n}".*?<p class="facts">(.*?)</p>`).exec(html)[1].replace(/<\/span>/g, " | ").replace(/<[^>]+>/g, "");
-  assert.equal(facts(1), "3 of 3 decided | Review copied 12 Nov | ");
-  assert.equal(facts(2), "3 of 3 decided | 2 to change: Fig. 2, Table &lt;1&gt; | Review not copied yet | ");
+  assert.equal(facts(1), "3 of 3 decided | Review added 12 Nov | "); // the page put it on the pull request
+  assert.equal(facts(2), "3 of 3 decided | 2 to change: Fig. 2, Table &lt;1&gt; | Review not added yet | ");
+  // copied: the page cannot know that it was pasted, so it says no more than that
+  const sentAs = (sent) => /<p class="facts">(.*?)<\/p>/.exec(core.pullsHtml("o/r", [pull(1)], new Map([[1, { state: "agreed", done: 3, all: 3, change: [], sent }]])))[1].replace(/<[^>]+>/g, " ").trim().split(/\s{2,}/).pop();
+  assert.equal(sentAs({ state: "yes", when: "12 Nov", how: "copied" }), "Review copied 12 Nov");
+  assert.equal(sentAs({ state: "stale", when: "12 Nov", how: "copied" }), "Decisions changed since you copied the review");
+  assert.equal(sentAs({ state: "stale", when: "12 Nov", how: "added" }), "Decisions changed since you added the review");
+  // a pull request takes the review as a comment; a branch has no pull request, so its review is copied
+  const page = core.reviewHtml(review(), ctx).html;
+  assert.equal((page.match(/<button type="button" class="send">Add review<\/button>/g) || []).length, 2); // the bar, and the last card of a phone
+  assert.equal((page.match(/<p class="sendnote" role="status" hidden><\/p>/g) || []).length, 2);
+  assert.ok(!page.includes("Copy review"));
+  assert.equal((core.reviewHtml({ ...review(), number: undefined, label: "side" }, ctx).html.match(/class="send">Copy review</g) || []).length, 2);
   assert.equal(facts(3), "1 of 3 decided | ");
   assert.equal(facts(4), "3 of 3 decided before it changed | 2 to decide again | 1 to change: Fig. 1 | ");
   assert.equal(facts(5), "Not opened yet | ");

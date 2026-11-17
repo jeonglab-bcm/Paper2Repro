@@ -10,10 +10,12 @@ page shows what a reviewer has to judge:
   figure), **Ours**, and the **Overlap** (both drawn on top of each other). A click on a
   picture opens it large, alone, as wide as the block; a click on the large one shows the next,
   so two can be told apart in place. **Swipe** and **Blink** compare the original and ours.
-  **Earlier versions of ours**, below the pictures, lists the commits that wrote our picture,
-  with their dates and messages. A version opens in the place of ours, and a click on the
-  picture goes between it and ours as it is now, so a redraw can be seen (1 request a figure,
-  when asked).
+  **Earlier versions of ours**, below the pictures, shows our picture as each commit that wrote
+  it left it, the newest first. Each one is named by how many commits before the head of the
+  pull request it was written ("3 commits ago"), with its date and message. A version opens
+  large in the place of ours, named the same way, and a click on the picture goes between it
+  and ours as it is now, so a redraw can be seen (1 request a figure and 1 for the review, when
+  asked; "commits ago" counts back through the 100 latest commits).
 - **Tables.** In the shape of the paper's table, the paper's value over ours.
 - **The main figures and tables only.** The page asks about the figures and tables of the paper's
   main text. Supplementary results, numbers in the text and checks stay in `results.json`; the
@@ -56,8 +58,17 @@ page shows what a reviewer has to judge:
    verdict and the reason. **Next not decided** in the bar at the bottom jumps to the next
    one, and at the end one button accepts everything you left open as the pull request says.
    Decisions stay in your browser.
-4. **Copy review** puts your decisions on the clipboard as text, the verdicts you want changed
-   first (`Fig. 2: Partly → Agrees. <your comment>`). Paste it in the pull request.
+4. **Add review** puts your decisions on the pull request as one comment, the verdicts you want
+   changed first (`Fig. 2: Partly → Agrees. <your comment>`), and opens it on GitHub in a new
+   tab.
+   - **With a GitHub token that may write** (fine-grained: Pull requests, read and write) the
+     page adds the comment itself. The button then says **Open review** while the comment is as
+     your decisions are, and **Update review** once a decision changed: that edits the same
+     comment, so the pull request gets one comment for each commit you reviewed, not one for
+     each press.
+   - **With no token, or one that may only read,** the page copies the review and opens the
+     pull request at its comment box: paste it there.
+   - A branch with no pull request has nothing to comment on: the button is **Copy review**.
 
 ## The first page: where each pull request stands
 
@@ -72,10 +83,10 @@ The open pull requests are in three groups, by your decisions in this browser:
 | **Changes requested** | Changes requested | all decided, and at least one verdict is yours and not the pull request's, or is Not OK; "2 to change: Fig. 1, Fig. 3" |
 | **Accepted** | Accepted | all decided, all as the pull request says |
 
-A card in the last two groups also says whether you copied the review: **Review copied** with the
-time, **Review not copied yet**, or **Decisions changed since you copied the review**. The page
-knows that you pressed **Copy review**; it does not read the pull request's comments, so it
-cannot know that you pasted it.
+A card in the last two groups also says whether the review went out: **Review added** with the
+time when the page put it on the pull request, **Review copied** when it went to the clipboard,
+**Review not added yet**, or **Decisions changed since you added the review**. The page does not
+read the pull request's comments, so of a copied review it cannot know that you pasted it.
 
 Decisions stay in the browser where you made them. A phone and a computer each keep their own, so
 a pull request you reviewed on one is "Not opened" on the other.
@@ -127,7 +138,7 @@ table fills the screen, with its verdict buttons below it.
   ("2 / 13") and how much is decided.
 - **The last card** says what is left, lists your decisions apart (not decided, to change,
   accepted; a name goes to its card), accepts the rest as the pull request says if you want, and
-  has **Copy review**.
+  has **Add review**.
 - **Whole page** in the bar shows the page as on a computer; **Cards** in the bottom bar
   brings the cards back. The choice is remembered.
 
@@ -135,12 +146,15 @@ table fills the screen, with its verdict buttons below it.
 
 The site is static files. Your browser asks GitHub: the REST API for the pull request and its
 changed files (3 or 4 requests a review), and `raw.githubusercontent.com` for `results.json`,
-the pictures and the code. There is no server and no build for each pull request.
+the pictures and the code. There is no server and no build for each pull request. The page
+writes to GitHub in one case only: your review, as a comment on the pull request, when you press
+**Add review** with a token that may write.
 
 - **Request limit.** Without a token GitHub allows 60 API requests an hour for each network
   address, which an office can share. Opening the first page is 1 request, a review 3 or 4 the
   first time and 1 after that while its commit is the same, and asking for a new commit is 1. **GitHub token** on the first page saves a token in your
-  browser; it goes only to `api.github.com` and lifts the limit to 5,000.
+  browser; it goes only to `api.github.com` and lifts the limit to 5,000. Read-only access is
+  enough to read; **Add review** needs Pull requests: read and write to add the comment itself.
 - **Private repositories** need that token. This path is written but not tested.
 - **A branch** shows its first 300 changed files (GitHub's limit for a comparison). A pull
   request shows all of them.
