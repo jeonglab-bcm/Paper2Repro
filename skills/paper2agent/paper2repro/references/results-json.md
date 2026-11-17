@@ -11,7 +11,7 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
   "run": {"date": "2026-10-28", "pipeline": "<id>/figure-reproduction/main.nf", "command": "nextflow run ...",
           "inputs": [{"name": "S2.zip", "url": "...", "sha256": "..."}], "environment": {"python": "3.12.7", "numpy": "2.1.3"}},
   "session": {"ledger": "session/ledger.json"},
-  "skill": {"name": "paper2repro", "version": "0.5.0", "tag": "paper2repro-v0.5.0", "commit": "<sha>", "modified": false},
+  "skill": {"name": "paper2repro", "version": "0.6.0", "tag": "paper2repro-v0.6.0", "commit": "<sha>", "modified": false},
   "items": [ ... ],
   "summary": {"items": 9, "exact": 0, "agrees": 4, "...": 0, "open_causes": 2}
 }
@@ -41,6 +41,7 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
 | `check` | `passed`, `detail`: for executable checks such as a port against the original code. |
 | `assumptions` | [{`what`, `source`: `paper`, `authors_code`, `our_choice`, `read_from_figure` or `found_by_search`, `sensitivity`}]. Anything not taken from the paper or the authors' code goes here. |
 | `cause` | {`category`, `summary`, `evidence` [paths or URLs], `hypotheses` [{`hypothesis`, `test`, `result`: `supported`, `rejected` or `inconclusive`}], `status`: `explained` or `open`}. |
+| `layout` | How a figure of ours sits on the published frame: `{"drawn_on_published": true}`, or `panel_size_difference_px`, `ink_outside_frame` and `axes` [{`axis`, optional `scale`: `log`, `published`, `ours`}] for a new drawing, or `{"not_comparable": "<why>"}`. See "Layout". |
 | `outputs` | Paths, relative to the paper folder, of the render and overlay of a scored figure. |
 
 Give printed values as strings (`"0.69"`, `"277.37"`) so `{"printed": true}` knows their precision: half a unit in the last printed digit.
@@ -65,6 +66,28 @@ Values: `exact` if every field matches, `agrees` if every field matches but an a
 Checks: `agrees` if passed, `differs` if not. Method `none`: `not_attempted`.
 
 A figure reaches `exact` only through `values`, when the plotted numbers themselves can be compared (source data, a vector figure, a table behind it). Pixels top out at `agrees`.
+
+## Layout
+
+Every figure item that is attempted and lists a picture of ours in `outputs` has a `layout`, because the picture is shown next to the published one and on top of it. `check_results.py` accepts three records:
+
+| Record | When | Rule |
+| --- | --- | --- |
+| `{"drawn_on_published": true}` | Our series is drawn on a copy of the published picture. | Nothing more: the frame is the published one. |
+| `{"panel_size_difference_px": [0, 1], "ink_outside_frame": 0.0, "axes": [...]}` | The figure is drawn anew. | The panel of ours is within 2 px of the published size (or within the item's `pixels.tolerance_px` if that is larger), at most 1% of our ink falls outside the published picture, and every axis of ours is the published one. |
+| `{"not_comparable": "<why>"}` | A drawing with no axes to share. | The reason is given. Never for a plot with axes. |
+
+`panel_size_difference_px` and `ink_outside_frame` are the `layout` block of `compare_figure.py`'s `report.json`; let the pipeline copy them. `axes` has one entry for each axis of the panel:
+
+```json
+"axes": [
+  {"axis": "x", "published": [0, 0.1], "ours": [0, 0.1]},
+  {"axis": "y", "scale": "log", "published": [0.001, 1], "ours": [0.001, 1]},
+  {"axis": "bars", "published": ["mean", "median", "ES"], "ours": ["mean", "median", "ES"]}
+]
+```
+
+`published` holds the data values at the two ends of the axes box, from the tick calibration of the published picture; `ours` holds the limits our plotting code drew with, read back from it. Numeric limits agree when each end is within 0.5% of the published axis length (of its length in decades for `"scale": "log"`). An axis of names (bars, groups, the rows of a heat map) agrees when ours has the same names in the same order. Draw with the published axis even when our values differ; say in the item's cause how many points of ours fall outside it.
 
 ## Causes
 

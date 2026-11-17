@@ -34,6 +34,10 @@ CAUSES = {
     "not_a_result", "metric_resolution", "unknown",
 }
 NEEDS_CAUSE = {"partly", "inconclusive", "differs", "not_attempted"}
+PICTURES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+FRAME_PX = 2  # how far the panel of ours may be from the published size and still be on its frame
+INK_OUTSIDE = 0.01  # share of our ink that may fall outside the published picture
+AXIS_SHARE = 0.005  # how far an axis limit of ours may be from the published one, as a share of the axis
 SEMVER = r"\d+\.\d+\.\d+"
 
 
@@ -140,6 +144,74 @@ def verdict_of(item, errors):
     return None, ""
 
 
+def axis_gap(ax):
+    """How far the limits of ours are from the published ones, as a share of the published axis; None if not numbers."""
+    pub, ours = ax.get("published"), ax.get("ours")
+    nums = [number(v) for v in (pub if isinstance(pub, list) else []) + (ours if isinstance(ours, list) else [])]
+    if len(nums) != 4 or any(n is None or math.isnan(n) for n in nums):
+        return None
+    if ax.get("scale") == "log":
+        if min(nums) <= 0:
+            return math.inf
+        nums = [math.log10(n) for n in nums]
+    span = abs(nums[1] - nums[0])
+    return math.inf if not span else max(abs(nums[2] - nums[0]), abs(nums[3] - nums[1])) / span
+
+
+def check_layout(item, errors):
+    """A figure of ours that is shown next to the published one is on its frame: same panel, same axes.
+
+    Three records pass: drawn_on_published (our series on a copy of the published picture), a new
+    drawing measured by compare_figure.py with its axis limits equal to the published ones, or
+    not_comparable with the reason, for a drawing that has no axes to share.
+    """
+    iid, lay = item.get("id", "?"), item.get("layout")
+    if item.get("kind") != "figure" or item.get("method") == "none":
+        return
+    if not any(str(o).lower().endswith(PICTURES) for o in item.get("outputs") or []):
+        return
+    how = "see references/figure-matching.md, The published frame"
+    if not isinstance(lay, dict):
+        errors.append(f"{iid}: a figure with a picture of ours needs layout, which says that it is on the published frame ({how})")
+        return
+    if "not_comparable" in lay:
+        if not str(lay["not_comparable"] or "").strip():
+            errors.append(f"{iid}: layout.not_comparable needs the reason")
+        return
+    if lay.get("drawn_on_published") is True:
+        return
+    size = lay.get("panel_size_difference_px")
+    if not (isinstance(size, list) and len(size) == 2 and all(number(v) is not None for v in size)):
+        errors.append(f"{iid}: layout needs panel_size_difference_px [dx, dy] from compare_figure.py's report ({how})")
+    else:
+        allowed = max(FRAME_PX, number((item.get("pixels") or {}).get("tolerance_px")) or 0)
+        if max(abs(number(v)) for v in size) > allowed:
+            errors.append(f"{iid}: ours is not on the published frame: its panel is {size[0]} x {size[1]} px off the published size "
+                          f"(allowed {allowed:g}). Draw it at the published size with its axes at the published box ({how})")
+    lost = number(lay.get("ink_outside_frame"))
+    if lost is None:
+        errors.append(f"{iid}: layout needs ink_outside_frame from compare_figure.py's report")
+    elif lost > INK_OUTSIDE:
+        errors.append(f"{iid}: {100 * lost:.1f}% of our ink falls outside the published picture: ours is larger than the published figure, or shifted")
+    axes = lay.get("axes")
+    if not isinstance(axes, list) or not axes:
+        errors.append(f"{iid}: layout needs axes, the limits of each axis as published and as ours draws it")
+        return
+    for ax in axes:
+        name = ax.get("axis") if isinstance(ax, dict) else None
+        if not name or "published" not in ax or "ours" not in ax:
+            errors.append(f"{iid}: each of layout.axes needs axis, published and ours")
+            continue
+        gap = axis_gap(ax)
+        if gap is None:
+            # an axis of names (bars, groups, rows of a heat map): the same names in the same order
+            if [str(v) for v in ax["published"] or []] != [str(v) for v in ax["ours"] or []] or not ax["published"]:
+                errors.append(f"{iid}: the {name} axis of ours is {ax['ours']}, the published one {ax['published']}: draw ours with the published axis")
+        elif gap > AXIS_SHARE:
+            errors.append(f"{iid}: the {name} axis of ours runs {ax['ours'][0]} to {ax['ours'][1]}, the published one {ax['published'][0]} to {ax['published'][1]}: "
+                          "draw ours with the published limits, and count the points that fall outside")
+
+
 def check_cause(item, verdict, errors):
     iid, cause = item.get("id", "?"), item.get("cause")
     if verdict not in NEEDS_CAUSE and not cause:
@@ -190,6 +262,7 @@ def check_item(item, root, errors):
             for o in outs:
                 if not os.path.exists(os.path.join(root, o)):
                     errors.append(f"{iid}: output {o} does not exist under {root}")
+    check_layout(item, errors)
     verdict, measure = verdict_of(item, errors)
     if verdict:
         check_cause(item, verdict, errors)

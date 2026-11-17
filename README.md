@@ -7,6 +7,7 @@
 - Works with or without a code repository.
 - Reads the paper through an agent-readable paper skill, built by the bundled [Paper2Skill](skills/paper2agent/paper2skill/SKILL.md) component.
 - Classifies every result with evidence: **identical data**, **same setup** (numeric noise) or **re-measured** (for example, timing on other hardware).
+- Draws each figure on the published figure's frame (the same picture size, axes box and axis limits), measures that, and refuses a figure that is off it, so an overlay shows one set of axes.
 - Records every figure, table and number in a `results.json`; `check_results.py` computes each verdict (exact, agrees, partly, inconclusive, differs, not attempted), with negative controls under every figure score and a tested cause for every miss.
 - Packages the paper's method as an installable Python or R package with example data, tests and an executed tutorial. See [Package and Tutorial](#-package-and-tutorial).
 - Delivers a rerunnable Nextflow pipeline, a check report, CI on the paper's architecture and a static comparison site, in one pull request, with a ledger of the session's prompts, tool calls and tokens.

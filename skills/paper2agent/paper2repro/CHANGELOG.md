@@ -11,7 +11,8 @@ and examples that change nothing a reproduction produces.
 
 | Version | Date | Commit on `main` | Pull request | What changed |
 | --- | --- | --- | --- | --- |
-| 0.5.0 | 2026-11-10 | - | #9 | The skill records its release: `scripts/skill_version.py` writes the top-level `skill` block (version, tag, commit, uncommitted changes) into `results.json`, and `check_results.py` requires it. |
+| 0.6.0 | 2026-11-17 | - | - | Figures of ours are on the published frame: the published picture size, axes box and axis limits. Each figure item with a picture records its `layout`, and `check_results.py` refuses a missing one, a panel off the published size or an axis that is not the published one. `compare_figure.py` also finds a panel with no fill by its axis lines, takes the boxes as arguments, reports `same_frame` and fails on `--require-frame`. |
+| 0.5.0 | 2026-11-10 | d6a7558 | #9 | The skill records its release: `scripts/skill_version.py` writes the top-level `skill` block (version, tag, commit, uncommitted changes) into `results.json`, and `check_results.py` requires it. |
 | 0.4.0 | 2026-11-07 | 727d35e | #5 | Package the paper's method as a Python or R package with an executed tutorial; rules for other languages; R install through pak. |
 | 0.3.0 | 2026-11-05 | 0e010bc | #6 | Claims in the paper's text are scored like figures and tables; gaps with several differing inputs. |
 | 0.2.0 | 2026-11-03 | 77e217f | #4 | The fossil version: normalized `results.json` with computed verdicts, its checker, run comparison and the session ledger. |

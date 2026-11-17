@@ -13,6 +13,7 @@ Find each panel's axes box and its tick marks; fit the pixel-to-data map to the 
 ## Draw and compare
 
 - Draw our series at the published line width, in the published colour, on a copy of the published figure with the published trace removed (`fig*_ours.png`), and on the published figure in a contrasting colour (`fig*_overlay.png`). Render every panel you score; a score without a picture cannot be checked by a reader.
+- Ours and the overlay are on the published frame: the same picture size, axes box and axis limits. A series drawn on the published picture is there by construction (`layout.drawn_on_published`). A figure drawn anew has to be put there and measured before it is scored ([figure-matching.md](figure-matching.md), "The published frame"). A score from two pictures on different frames measures the frames.
 - Mask legends, labels and markers before scoring; score markers (peak crosses, points) separately by position and colour.
 - Score both ways: the share of published trace pixels within the tolerance of ours, and of ours within the tolerance of the published. The smaller is the score. One way alone is blind: in PMC1847688 Fig. 3a a trace smoothed with the wrong window still covers 99.98% of the published pixels one way and 61% the other.
 - Use one tolerance per repository (2 px at 600 dpi) unless the figure's resolution forces another, and record it.

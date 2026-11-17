@@ -77,6 +77,69 @@ def test_panel_size_warning():
     assert any("Refit" in w for w in report["warnings"])
 
 
+def plain(shape, box, ylim_shift=0, left_bottom_only=False):
+    """White canvas and a white panel: a box of axis lines (or a left and a bottom axis), ticks, and a curve."""
+    img = np.full(shape, 255.0)
+    x0, x1, y0, y1 = box
+    img[y0 : y1 + 1, x0 : x0 + 2] = 0  # left axis
+    img[y1 - 1 : y1 + 1, x0 : x1 + 1] = 0  # bottom axis
+    if not left_bottom_only:
+        img[y0 : y1 + 1, x1 - 1 : x1 + 1] = 0
+        img[y0 : y0 + 2, x0 : x1 + 1] = 0
+    for k in range(5):
+        img[y1 + 1 : y1 + 6, x0 + k * (x1 - x0) // 4 : x0 + k * (x1 - x0) // 4 + 2] = 0  # x ticks
+        img[y1 - k * (y1 - y0) // 4 - 1 : y1 - k * (y1 - y0) // 4 + 1, x0 - 5 : x0] = 0  # y ticks
+    for x in range(x0 + 6, x1 - 6):
+        y = y0 + (y1 - y0) // 2 + int(25 * np.sin(x / 9.0)) + ylim_shift
+        img[y : y + 2, x] = 0
+    img[y0 + 8 : y0 + 12, x0 + 12 : x0 + 40] = 60  # a legend key
+    return img
+
+
+def test_white_panel_found_by_its_axis_lines():
+    box = (60, 290, 25, 180)
+    pub = plain((220, 320), box)
+    ren = np.full((260, 360), 255.0)
+    ren[20 : 20 + 220, 30 : 30 + 320] = plain((220, 320), box)
+    report, _ = cf.compare(pub, ren)
+    assert report["panel_found_by"] == {"published": "lines", "render": "lines"}
+    assert report["published_panel_box"] == list(box), report["published_panel_box"]
+    assert report["shift_px"] == [-30, -20] and report["panel_size_difference_px"] == [0, 0]
+    assert report["same_frame"] and report["chamfer_inside_panel_px"] == 0.0
+    assert report["layout"] == {"panel_size_difference_px": [0, 0], "ink_outside_frame": 0.0}
+    # a left and a bottom axis with no box: the far ends of the two lines close the frame
+    open_axes = cf.compare(plain((220, 320), box, left_bottom_only=True), ren)[0]
+    assert open_axes["published_panel_box"] == list(box) and open_axes["same_frame"], open_axes["published_panel_box"]
+
+
+def test_another_frame_is_said_and_can_fail():
+    pub = plain((220, 320), (60, 290, 25, 180))
+    ren = plain((220, 320), (60, 290, 40, 180))  # the panel of ours is 15 px shorter
+    report, _ = cf.compare(pub, ren)
+    assert report["panel_size_difference_px"] == [0, -15] and not report["same_frame"]
+    assert any("not on the published frame" in w for w in report["warnings"])
+    assert cf.compare(pub, ren, frame_tol=20)[0]["same_frame"]
+    # the boxes can be given, for a figure whose frame cannot be found
+    given, _ = cf.compare(pub, ren, pbox=[60, 290, 25, 180], rbox=[60, 290, 40, 180])
+    assert given["panel_found_by"] == {"published": "given", "render": "given"} and given["panel_size_difference_px"] == [0, -15]
+    blank = np.full((220, 320), 255.0)
+    try:
+        cf.compare(pub, blank)
+        raise AssertionError("a picture with no frame should be refused")
+    except SystemExit as err:
+        assert "--render-box" in str(err)
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        Image.fromarray(pub.astype(np.uint8)).save(d / "pub.png")
+        Image.fromarray(ren.astype(np.uint8)).save(d / "ren.png")
+        cmd = [sys.executable, str(HERE / "compare_figure.py"), "--published", str(d / "pub.png"), "--render", str(d / "ren.png"), "--out", str(d / "out")]
+        assert subprocess.run(cmd, capture_output=True).returncode == 0
+        failed = subprocess.run(cmd + ["--require-frame"], capture_output=True, text=True)
+        assert failed.returncode == 1 and "not on the published frame" in failed.stdout, failed
+        assert json.loads((d / "out" / "report.json").read_text())["same_frame"] is False
+        assert subprocess.run(cmd + ["--require-frame", "--render-box", "60,290,25,180"], capture_output=True).returncode == 0
+
+
 def test_cli_outputs():
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)

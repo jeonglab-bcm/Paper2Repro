@@ -47,7 +47,31 @@ def main():
         for k, v in expect.items():
             if verdicts.get(k) != v:
                 failures.append(f"{k}: verdict {verdicts.get(k)}, expected {v}")
+        # a new drawing of ours that is on the published frame: same panel, same axis limits
+        redrawn = {"panel_size_difference_px": [0, -1], "ink_outside_frame": 0.0, "axes": [
+            {"axis": "x", "published": ["2000", "10000"], "ours": [2000, 10010]},
+            {"axis": "y", "scale": "log", "published": [0.001, 1], "ours": [0.001, 1]},
+            {"axis": "bars", "published": ["mean", "median", "ES"], "ours": ["mean", "median", "ES"]}]}
+        lay = lambda d, **change: item(d, "fig2").update(layout={**redrawn, **change})  # noqa: E731
+        for name, mutate in {
+            "a new drawing on the published frame": lambda d: lay(d),
+            "a drawing with no axes to share, with the reason": lambda d: item(d, "fig2").update(layout={"not_comparable": "A network laid out at random in the paper and in ours."}),
+            "a panel off by the item's own pixel tolerance": lambda d: (item(d, "fig2")["pixels"].update(tolerance_px=3), lay(d, panel_size_difference_px=[3, 0])),
+            "a figure that is not attempted needs no layout": lambda d: item(d, "fig1").pop("layout", None),
+        }.items():
+            rc, out = results_case(tmp, name.replace(" ", "_"), mutate)
+            if rc != 0:
+                failures.append(f"check_results.py refused {name}: {out}")
         broken = {
+            "figure with a picture and no layout": lambda d: item(d, "fig2").pop("layout"),
+            "panel off the published frame": lambda d: lay(d, panel_size_difference_px=[0, -15]),
+            "ours larger than the published picture": lambda d: lay(d, ink_outside_frame=0.2),
+            "new drawing without its axis limits": lambda d: lay(d, axes=[]),
+            "axis limits that are not the published ones": lambda d: lay(d, axes=[{"axis": "y", "published": [0, 250], "ours": [0, 300]}]),
+            "log axis that starts a decade off": lambda d: lay(d, axes=[{"axis": "y", "scale": "log", "published": [0.001, 1], "ours": [0.01, 1]}]),
+            "bars in another order": lambda d: lay(d, axes=[{"axis": "bars", "published": ["mean", "median"], "ours": ["median", "mean"]}]),
+            "not comparable without a reason": lambda d: item(d, "fig2").update(layout={"not_comparable": " "}),
+            "layout without the measured panel": lambda d: item(d, "fig2").update(layout={"axes": redrawn["axes"], "ink_outside_frame": 0}),
             "no wrong-input control": lambda d: item(d, "fig2")["pixels"].update(controls=[c for c in item(d, "fig2")["pixels"]["controls"] if c["kind"] != "wrong_input"]),
             "threshold below a control": lambda d: item(d, "fig2")["pixels"].update(threshold=0.98),
             "open cause with one test": lambda d: item(d, "fig9.b")["cause"].update(hypotheses=item(d, "fig9.b")["cause"]["hypotheses"][:1]),

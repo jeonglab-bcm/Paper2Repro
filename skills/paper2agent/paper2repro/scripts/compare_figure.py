@@ -5,10 +5,16 @@
 # ///
 """Align a reproduced figure to the published figure and measure the pixel difference.
 
-The plot panel is found in both images by its fill grey. The reproduction is shifted so the
-panel corners coincide, then cropped or padded to the published frame. Outputs: aligned.png,
-overlay.png (red = reproduction only, cyan = published only, black = both), diff.png and
-report.json. Optional regions give per-element offsets.
+The plot panel is found in both images: by its fill grey, by its axis lines where the panel has
+no fill, or as the box given with --published-box and --render-box. The reproduction is shifted
+so the panel corners coincide, then cropped or padded to the published frame. Outputs:
+aligned.png, overlay.png (red = reproduction only, cyan = published only, black = both),
+diff.png and report.json. Optional regions give per-element offsets.
+
+report.json says whether the reproduction is on the published frame (same_frame): its panel has
+the published size within --frame-tolerance, and its ink stays inside the published picture.
+An overlay of two figures on different frames compares nothing, so fix the frame first.
+--require-frame makes a different frame an error (exit 1).
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from PIL import Image
 from scipy import ndimage
 
 INK = 170  # grey level below which a pixel counts as ink (text, lines, marks)
+LINE_SHARE = 0.3  # an axis line is a run of ink at least this share of the picture's width or height
 
 
 def load(path: Path) -> np.ndarray:
@@ -44,6 +51,52 @@ def panel_box(img: np.ndarray, grey: int, tol: int) -> tuple[int, int, int, int]
     if not len(cols) or not len(rows):
         raise SystemExit(f"No panel with grey {grey} ± {tol}.")
     return int(cols.min()), int(cols.max()), int(rows.min()), int(rows.max())
+
+
+def longest_run(row: np.ndarray) -> tuple[int, int]:
+    """(length, start) of the longest run of True in a 1-D mask."""
+    d = np.diff(np.concatenate(([0], row.astype(np.int8), [0])))
+    starts, ends = np.where(d == 1)[0], np.where(d == -1)[0]
+    if not len(starts):
+        return 0, 0
+    k = int((ends - starts).argmax())
+    return int(ends[k] - starts[k]), int(starts[k])
+
+
+def line_box(img: np.ndarray) -> tuple[int, int, int, int]:
+    """(x0, x1, y0, y1) of the axes frame of a figure whose panel has no fill.
+
+    The frame is bounded by the outermost long axis lines. Two lines that meet in a corner
+    (a left and a bottom axis) are closed by their far ends.
+    """
+    ink = img < INK
+    H, W = ink.shape
+    rows = [(n, s, y) for y in range(H) for n, s in [longest_run(ink[y])] if n >= LINE_SHARE * W]
+    cols = [(n, s, x) for x in range(W) for n, s in [longest_run(ink[:, x])] if n >= LINE_SHARE * H]
+    if not rows or not cols:
+        raise SystemExit(
+            "No panel fill and no axis lines found. Give the axes box: --published-box / --render-box x0,x1,y0,y1."
+        )
+    x0, x1 = min(x for _, _, x in cols), max(x for _, _, x in cols)
+    y0, y1 = min(y for _, _, y in rows), max(y for _, _, y in rows)
+    if x1 - x0 < LINE_SHARE * W:  # one vertical axis: the horizontal lines end at the right edge
+        x1 = max(s + n - 1 for n, s, _ in rows)
+    if y1 - y0 < LINE_SHARE * H:  # one horizontal axis: the vertical lines end at the top edge
+        y0 = min(s for _, s, _ in cols)
+    return x0, x1, y0, y1
+
+
+def find_box(img: np.ndarray, grey, tol: int, given=None) -> tuple[tuple[int, int, int, int], str, int | None]:
+    """The axes box of a figure, how it was found (given, fill or lines) and the panel grey when it has a fill."""
+    if given is not None:
+        return tuple(int(v) for v in given), "given", grey
+    try:
+        g = panel_grey(img) if grey is None else grey
+        return panel_box(img, g, tol), "fill", g
+    except SystemExit:
+        if grey is not None:
+            raise
+        return line_box(img), "lines", None
 
 
 def align(
@@ -106,10 +159,12 @@ def compare(
     tol=4,
     regions=(),
     window=10,
+    pbox=None,
+    rbox=None,
+    frame_tol=2,
 ) -> tuple[dict, np.ndarray]:
-    pgrey = panel_grey(published) if pgrey is None else pgrey
-    rgrey = panel_grey(render) if rgrey is None else rgrey
-    pbox, rbox = panel_box(published, pgrey, tol), panel_box(render, rgrey, tol)
+    pbox, phow, pgrey = find_box(published, pgrey, tol, pbox)
+    rbox, rhow, rgrey = find_box(render, rgrey, tol, rbox)
     aligned, shift, lost = align(render, rbox, published.shape, pbox)
     d = np.abs(aligned - published)
     inside = np.zeros(published.shape, bool)
@@ -123,6 +178,7 @@ def compare(
         "render_panel_grey": rgrey,
         "published_panel_box": list(pbox),
         "render_panel_box": list(rbox),
+        "panel_found_by": {"published": phow, "render": rhow},
         "panel_size_difference_px": list(size_diff),
         "shift_px": list(shift),
         "render_ink_outside_frame": round(lost, 4),
@@ -133,6 +189,12 @@ def compare(
         "regions": {},
         "warnings": [],
     }
+    # The two measured numbers of an item's `layout` in results.json; the axis limits come from the plotting code.
+    report["layout"] = {
+        "panel_size_difference_px": list(size_diff),
+        "ink_outside_frame": round(lost, 4),
+    }
+    report["same_frame"] = max(abs(v) for v in size_diff) <= frame_tol and lost <= 0.01
     if max(abs(v) for v in size_diff) > 1:
         report["warnings"].append(
             f"Panel size differs by {size_diff} px. Refit the drawing width and height before you tune anything else."
@@ -140,6 +202,11 @@ def compare(
     if lost > 0.01:
         report["warnings"].append(
             f"{lost:.1%} of the reproduction's ink falls outside the published frame."
+        )
+    if not report["same_frame"]:
+        report["warnings"].append(
+            "The reproduction is not on the published frame, so the overlay compares nothing. "
+            "Draw it at the published size, with its axes at the published box and the published axis limits."
         )
     for r in regions:
         off = best_shift(aligned, published, r["box"], window)
@@ -183,6 +250,30 @@ def main() -> None:
     ap.add_argument(
         "--tolerance", type=int, default=4, help="grey tolerance for panel detection"
     )
+    box = lambda text: [int(v) for v in text.split(",")]  # noqa: E731
+    ap.add_argument(
+        "--published-box",
+        type=box,
+        metavar="X0,X1,Y0,Y1",
+        help="axes box of the published figure in its pixels (default: found by fill, then by axis lines)",
+    )
+    ap.add_argument(
+        "--render-box",
+        type=box,
+        metavar="X0,X1,Y0,Y1",
+        help="axes box of the reproduction in its pixels (default: found the same way)",
+    )
+    ap.add_argument(
+        "--frame-tolerance",
+        type=int,
+        default=2,
+        help="largest panel-size difference (px) that still counts as the published frame",
+    )
+    ap.add_argument(
+        "--require-frame",
+        action="store_true",
+        help="exit 1 when the reproduction is not on the published frame",
+    )
     ap.add_argument(
         "--regions",
         type=Path,
@@ -202,6 +293,9 @@ def main() -> None:
         a.tolerance,
         regions,
         a.window,
+        a.published_box,
+        a.render_box,
+        a.frame_tolerance,
     )
     write_images(published, aligned, a.out)
     (a.out / "report.json").write_text(json.dumps(report, indent=1) + "\n")
@@ -212,6 +306,7 @@ def main() -> None:
                 for k in (
                     "shift_px",
                     "panel_size_difference_px",
+                    "same_frame",
                     "mean_abs_grey_difference",
                     "chamfer_outside_panel_px",
                 )
@@ -220,6 +315,8 @@ def main() -> None:
     )
     for w in report["warnings"]:
         print("WARNING:", w)
+    if a.require_frame and not report["same_frame"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
