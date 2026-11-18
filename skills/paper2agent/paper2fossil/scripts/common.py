@@ -177,6 +177,19 @@ def europepmc_record(kind, value):
     return europepmc_fields(hits[0])
 
 
+def europepmc_fulltext(pmcid, timeout=60):
+    """Plain text of an open-access paper from Europe PMC's full-text XML, or "" if unavailable."""
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
+    try:
+        with _request(url, headers={"Accept": "application/xml"}, timeout=timeout) as r:
+            xml = r.read().decode("utf-8", "replace")
+    except Exception:
+        return ""
+    # Keep link targets: lab URLs are often only in xlink:href attributes.
+    xml = re.sub(r'<ext-link[^>]*xlink:href="([^"]+)"[^>]*>', r" \1 ", xml)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", xml))
+
+
 def europepmc_fields(r):
     return {
         "pmcid": r.get("pmcid"), "pmid": r.get("pmid"),
