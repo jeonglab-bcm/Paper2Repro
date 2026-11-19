@@ -8,6 +8,7 @@ Check every line on the pull request's head commit. Each one is here because a p
 - [ ] `check_results.py <id>/results.json` exits 0: verdicts and summary computed, no missing causes, no untested open causes.
 - [ ] `results.json` has the `skill` block written by `skill_version.py` from the installed skill, and the pipeline's merge step keeps it on a rerun.
 - [ ] Every attempted figure panel has a render (`fig*_ours.png`) and an overlay (`fig*_overlay.png`), listed in its `outputs`. Scoring a panel without drawing it is not enough.
+- [ ] Every one of those renders is on the published frame: the published picture size, each panel's axes at the published box, the published axis limits, tick values and order of bars, and its `layout` in `results.json` says so ([figure-matching.md](figure-matching.md), "The published frame"). Open each overlay and look: one set of axes, one legend, one title.
 - [ ] Every pixel-scored panel has at least one wrong-input control and, where amplitude or position matters, near-miss controls; the pass mark sits above all of them.
 - [ ] Every constant read off a figure or found by search is an `assumption` with its sensitivity.
 - [ ] Every `partly`, `inconclusive`, `differs` and `not_attempted` item has a cause; `open` causes list at least two tested hypotheses.

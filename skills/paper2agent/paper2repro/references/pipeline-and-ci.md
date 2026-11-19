@@ -34,6 +34,7 @@ Pin what the scores depend on: `requirements.txt` with `==` versions installed b
 `check_reproduction.py` (or equivalent) should fail the run when:
 
 - a pass mark is breached (`check_results.py` exits 1);
+- a figure of ours is not on the published frame, or its `layout` is missing (`check_results.py` exits 1; `compare_figure.py --require-frame` says so where the figure is drawn);
 - the fresh run differs from the committed outputs (`compare_runs.py <fresh> <id>/figure-reproduction/output`, with `--ignore` only for files that cannot be reproduced bit for bit, each named in the README);
 - an expected output is missing;
 - the package check fails (`check_package.py` exits 1, or an R step fails).

@@ -43,8 +43,8 @@
   },
   "skill": {
     "name": "paper2repro",
-    "version": "0.5.0",
-    "tag": "paper2repro-v0.5.0",
+    "version": "0.6.0",
+    "tag": "paper2repro-v0.6.0",
     "commit": "0123456789abcdef0123456789abcdef01234567",
     "modified": false
   },
@@ -124,6 +124,9 @@
           "sensitivity": "At 0.19 or 0.21 times the counts the score falls to 98.97% and 98.26%"
         }
       ],
+      "layout": {
+        "drawn_on_published": true
+      },
       "outputs": [
         "figure-reproduction/output/fig2_ours.png",
         "figure-reproduction/output/fig2_overlay.png"
@@ -180,6 +183,9 @@
         ],
         "status": "explained"
       },
+      "layout": {
+        "drawn_on_published": true
+      },
       "outputs": [
         "figure-reproduction/output/fig3_ours.png",
         "figure-reproduction/output/fig3_overlay.png"
@@ -218,6 +224,9 @@
           "sensitivity": "Neighbouring settings score 72% or below"
         }
       ],
+      "layout": {
+        "drawn_on_published": true
+      },
       "outputs": [
         "figure-reproduction/output/fig5_ours.png",
         "figure-reproduction/output/fig5_overlay.png"
@@ -266,6 +275,9 @@
           "sensitivity": "With it the 16 published peaks come back at their published positions"
         }
       ],
+      "layout": {
+        "drawn_on_published": true
+      },
       "outputs": [
         "figure-reproduction/output/fig7_ours.png",
         "figure-reproduction/output/fig7_overlay.png"
@@ -358,6 +370,9 @@
           }
         ],
         "status": "open"
+      },
+      "layout": {
+        "drawn_on_published": true
       },
       "outputs": [
         "figure-reproduction/output/fig9_ours.png",
