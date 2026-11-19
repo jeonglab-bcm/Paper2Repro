@@ -18,6 +18,8 @@
 | `software.status` | yes | `lost` or `partly_found` ([software-search.md](software-search.md)) |
 | `software.summary` | yes | One to three sentences: what the paper pointed to, what happened to it, and anything found later |
 | `software.evidence` | yes | `[{where, finding, checked}]`, one per place checked, including the ones that found nothing |
+| `software.likely_moved` | yes | Copied from `check_software.py --json`: the live candidate homes it found (an empty list if none) |
+| `software.moved_candidates` | when `likely_moved` is not empty | `[{where, why_not}]`: for each live candidate, why it is not this paper's software (a different tool with the same name, a later reimplementation). If it is the same tool, the paper is not a target and no issue is drafted |
 | `data_status` | yes | `complete`, `partial` or `none_needed` ([data-check.md](data-check.md)) |
 | `validate` | yes | `[{item, published}]`, one row per figure, table or claim to compare against, with the published numbers copied from the paper |
 | `validate_notes` | no | A paragraph under the table: inconsistencies in the paper, items that are not results, what level of agreement to expect |

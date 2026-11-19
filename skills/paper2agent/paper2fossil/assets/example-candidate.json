@@ -27,7 +27,8 @@
       {"where": "PSSM-DT web server (the paper's only software link)", "finding": "answers 503; Wayback capture exists", "checked": "2026-10-28"},
       {"where": "CRAN, Bioconductor, PyPI, bio.tools", "finding": "no entry named PSSM-DT", "checked": "2026-10-28"},
       {"where": "BioSeq-Analysis2.0 (same lab)", "finding": "has a PSSM-DT feature mode: a later reimplementation, not the paper's code", "checked": "2026-10-28"}
-    ]
+    ],
+    "likely_moved": []
   },
   "data_status": "complete",
   "validate": [

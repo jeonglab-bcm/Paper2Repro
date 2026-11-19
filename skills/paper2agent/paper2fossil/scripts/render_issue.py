@@ -75,6 +75,17 @@ def errors_of(c):
     for e in sw.get("evidence", []):
         if not all(e.get(k) for k in ("where", "finding", "checked")):
             errs.append(f"software.evidence entry needs where, finding and checked: {e}")
+    if "likely_moved" not in sw:
+        errs.append("software.likely_moved is missing: copy it from check_software.py's JSON (an empty list if none)")
+    ruled_out = {m.get("where"): m for m in sw.get("moved_candidates", [])}
+    for m in sw.get("moved_candidates", []):
+        if not m.get("where") or not m.get("why_not"):
+            errs.append(f"software.moved_candidates entry needs where and why_not: {m}")
+    for m in sw.get("likely_moved") or []:
+        where = m.get("where") if isinstance(m, dict) else m
+        if not (ruled_out.get(where) or {}).get("why_not"):
+            errs.append(f"check_software.py found a live candidate home, {where}: open it. If it is the same tool, the "
+                        "paper is not a fossil target; if not, say why in software.moved_candidates")
 
     v = c.get("validate") or []
     if not v:
@@ -149,6 +160,17 @@ def render(c, skill_ref="main"):
         "| --- | --- | --- |",
         *[f"| {cell(e['checked'])} | {cell(e['where'])} | {cell(e['finding'])} |" for e in sw["evidence"]],
         "",
+    ]
+    if sw.get("moved_candidates"):
+        out += [
+            "Live pages that looked like a new home, and why they are not this paper's software:",
+            "",
+            "| Where | Why it is not the paper's software |",
+            "| --- | --- |",
+            *[f"| {cell(m['where'])} | {cell(m['why_not'])} |" for m in sw["moved_candidates"]],
+            "",
+        ]
+    out += [
         "## How to take this paper",
         "",
         "1. Read the paper on PMC and check this spec against it. The spec can be wrong; say so in a comment.",

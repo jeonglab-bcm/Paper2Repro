@@ -79,7 +79,7 @@ software is lost, and propose it to fossil.
 
 - **A description is enough.** `find_candidates.py` searches fossil's availability audit (7,080 papers, already checked) and then Europe PMC (open-access methods papers). It shows a shortlist, and you pick.
 - **Identifiers are checked against each other.** `resolve_ids.py` looks up every PMCID, DOI and PMID you give, and stops if they name different papers, if the title doesn't match, or if the paper isn't open access in PMC.
-- **No duplicates, no moved software.** `check_duplicates.py` searches fossil's folders, plans, issues and pull requests, and `check_software.py` collects evidence from the paper's links, the Wayback Machine, registries and GitHub. A paper whose code moved to a live home isn't nominated.
+- **No duplicates, no moved software.** `check_duplicates.py` searches fossil's folders, plans, issues and pull requests, and `check_software.py` collects evidence from the paper's links, the Wayback Machine, registries, GitHub and later papers by the same authors. It also tries each dead link over https, on its parent pages and on any new lab domain those papers name. A paper whose code moved to a live home isn't nominated.
 - **The issue is generated, not typed.** `render_issue.py` builds the issue in fossil's layout from `candidate.json`: the paper, software status, what to validate, inputs, known gaps, effort, the full plan and the search evidence. It refuses to render if any check failed, and posts only with `--post`.
 
 Posting needs [`gh`](https://cli.github.com/) logged in, or `GITHUB_TOKEN` set with permission to open issues in fossil.

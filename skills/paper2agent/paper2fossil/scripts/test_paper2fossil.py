@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import check_duplicates  # noqa: E402
+import check_software  # noqa: E402
 import common  # noqa: E402
 import find_candidates  # noqa: E402
 import render_issue  # noqa: E402
@@ -155,6 +156,89 @@ def test_duplicates():
         expect(r["status"] == "check_failed", f"an unanswered GitHub check must not pass: {r['status']}")
 
 
+# --------------------------------------------------------------- software
+# Two papers that were nearly nominated as lost while their code was live (2026-11-18):
+# E-Predict (PMC1242213) moved to another path on the same host, served over https, and only bio.tools
+# knew the new path; N-of-1-pathways (PMC4215042) moved to a new lab domain named in a later paper.
+SITES = {
+    "http://derisilab.ucsf.edu/epredict/": 503,
+    "https://derisilab.ucsf.edu/epredict/": 404,
+    "https://derisilab.ucsf.edu/": 200,
+    "http://derisilab.ucsf.edu/software/epredict/index.html": 503,
+    "https://derisilab.ucsf.edu/software/epredict/index.html": 200,
+    "http://lussierlab.org/publications/N-of-1-pathways": 404,
+    "https://lussierlab.org/publications/N-of-1-pathways": 404,
+    "https://lussierlab.org/": 200,
+    "https://lussiergroup.org/publications/N-of-1-pathways": 200,
+    "https://lussiergroup.org/publications/MixEnrich": 200,
+}
+BIOTOOLS = {"e-predict": {"biotoolsID": "e-predict", "name": "E-Predict",
+                          "homepage": "http://derisilab.ucsf.edu/software/epredict/index.html"}}
+# Free-text search splits "E-Predict" into two words; the real top three are unrelated tools.
+BIOTOOLS_Q = [{"biotoolsID": "stanpumpr", "name": "stanpumpr"}, {"biotoolsID": "cpsr", "name": "CPSR"},
+              {"biotoolsID": "codon-code-lens", "name": "Codon Code Lens"}]
+LATER = {"N-of-1-pathways": [{"pmcid": "PMC5461551", "pubYear": "2017", "title": "N-of-1-pathways MixEnrich"}]}
+FULLTEXT = {"PMC5461551": "Software is available at https://lussiergroup.org/publications/MixEnrich and on request."}
+
+
+def fake_status(url, timeout=20):
+    code = SITES.get(url, 0)
+    return code, (url if 200 <= code < 400 else (f"HTTP {code}" if code else "URLError"))
+
+
+def fake_json(url, params=None, headers=None, timeout=30):
+    params = params or {}
+    if url.startswith("https://bio.tools/api/tool/") and url != "https://bio.tools/api/tool/":
+        t = BIOTOOLS.get(url.rstrip("/").rsplit("/", 1)[1])
+        return (200, t) if t else (404, {"detail": "Not found."})
+    if url == "https://bio.tools/api/tool/":
+        if "q" in params:
+            return 200, {"count": 8519, "list": BIOTOOLS_Q}
+        return 200, {"count": 0, "list": [t for t in BIOTOOLS.values() if t["name"] == params.get("name")]}
+    if url == common.EUROPEPMC:
+        hits = [r for n, rs in LATER.items() if f'"{n}"' in params.get("query", "") for r in rs]
+        return 200, {"resultList": {"result": hits}}
+    if "api.github.com" in url:
+        return 200, {"items": []}
+    return 404, None
+
+
+def test_software():
+    v = check_software.url_variants("http://derisilab.ucsf.edu/epredict/")
+    expect(v[0] == "https://derisilab.ucsf.edu/epredict/", f"the other scheme is tried first: {v}")
+    expect("https://derisilab.ucsf.edu/" in v, f"the host root is tried: {v}")
+    expect(check_software.norm("E-Predict") == check_software.norm("epredict"), "names compare without punctuation")
+
+    saved = (common.url_status, common.get_json, common.europepmc_fulltext)
+    common.url_status, common.get_json = fake_status, fake_json
+    common.europepmc_fulltext = lambda pmcid, timeout=60: FULLTEXT.get(pmcid, "")
+    try:
+        r = check_software.gather("PMC1242213", ["http://derisilab.ucsf.edu/epredict/"], ["E-Predict"],
+                                  ["Urisman", "DeRisi"], year=2005)
+        moved = [m["where"] for m in r["likely_moved"]]
+        expect("https://derisilab.ucsf.edu/software/epredict/index.html" in moved,
+               f"E-Predict: the bio.tools homepage over https must be a likely home: {moved}")
+        link = next(e for e in r["evidence"] if e["kind"] == "paper link")
+        expect(link["host_live"] and "host still answers" in link["finding"], f"a live host is reported: {link}")
+        expect("no answer" in link["finding"], f"503 is 'no answer', not 'gone': {link['finding']}")
+
+        r = check_software.gather("PMC4215042", ["http://lussierlab.org/publications/N-of-1-pathways"],
+                                  ["N-of-1-pathways"], ["Gardeux", "Lussier"], year=2014)
+        moved = [m["where"] for m in r["likely_moved"]]
+        expect("https://lussiergroup.org/publications/N-of-1-pathways" in moved,
+               f"N-of-1-pathways: the paper's path on the lab's new domain must be a likely home: {moved}")
+        expect(quiet(check_software.main, ["--pmcid", "PMC4215042", "--url", "http://lussierlab.org/publications/N-of-1-pathways",
+                                           "--name", "N-of-1-pathways", "--author", "Lussier", "--year", "2014"]) == 4,
+               "a likely move exits 4")
+
+        r = check_software.gather("PMC3446288", ["http://people.binf.ku.dk/jwaage/RAINMAN/"], ["RAINMAN"],
+                                  ["Weischenfeldt", "Porse"], year=2012)
+        expect(r["likely_moved"] == [], f"a host that is gone is not a likely move: {r['likely_moved']}")
+        expect(any(e["kind"] == "later papers" for e in r["evidence"]), "the later-paper search is recorded even when empty")
+    finally:
+        common.url_status, common.get_json, common.europepmc_fulltext = saved
+
+
 # ----------------------------------------------------------------- render
 def render_case(mutate):
     c = json.load(open(EXAMPLE))
@@ -176,6 +260,12 @@ def test_render():
     _, body_ref = render_issue.render(c, "paper2fossil")
     expect("/blob/paper2fossil/skills/paper2agent/paper2repro/SKILL.md" in body_ref, "--skill-ref changes the links")
     expect("| Table 1 | Jackknife on the benchmark" in body, "validate rows render as a table")
+    errs, c = render_case(lambda c: c["software"].update(
+        likely_moved=[{"where": "https://lab.example/tool"}],
+        moved_candidates=[{"where": "https://lab.example/tool", "why_not": "a different tool with the same name"}]))
+    expect(errs == [], f"a live candidate ruled out with a reason passes: {errs}")
+    expect("| https://lab.example/tool | a different tool with the same name |" in render_issue.render(c)[1],
+           "ruled-out candidates are listed in the issue")
 
     broken = {
         "ids mismatch": (lambda c: c["ids"].update(status="mismatch"), "identifiers not resolved"),
@@ -190,6 +280,12 @@ def test_render():
         "evidence without a date": (lambda c: c["software"]["evidence"][0].pop("checked"), "needs where, finding and checked"),
         "nothing to validate": (lambda c: c.update(validate=[]), "validate is empty"),
         "data gone": (lambda c: c.update(data_status="unavailable"), "data_status"),
+        "check_software result not copied": (lambda c: c["software"].pop("likely_moved"), "likely_moved is missing"),
+        "live candidate not ruled out": (lambda c: c["software"].update(likely_moved=[{"where": "https://lab.example/tool"}]),
+                                         "found a live candidate home"),
+        "ruled out without a reason": (lambda c: c["software"].update(likely_moved=[{"where": "https://lab.example/tool"}],
+                                                                      moved_candidates=[{"where": "https://lab.example/tool"}]),
+                                       "needs where and why_not"),
         "no plan": (lambda c: c.update(plan=""), "plan is missing"),
     }
     for name, (mutate, needle) in broken.items():
@@ -208,7 +304,7 @@ def test_render():
 
 
 def main():
-    for t in (test_classify, test_resolve, test_catalog, test_duplicates, test_render):
+    for t in (test_classify, test_resolve, test_catalog, test_duplicates, test_software, test_render):
         t()
     if failures:
         print(f"{len(failures)} failure(s):")
