@@ -7,7 +7,7 @@ Usage:
 
 The block is read from the skill folder this script lives in, never typed by hand:
 
-  "skill": {"name": "paper2repro", "version": "0.6.0", "tag": "paper2repro-v0.6.0",
+  "skill": {"name": "paper2repro", "version": "0.7.0", "tag": "paper2repro-v0.7.0",
             "commit": "<sha of the skill checkout>" or null, "modified": false, true or null}
 
 `version` comes from the VERSION file. `commit` and `modified` come from git when the skill folder

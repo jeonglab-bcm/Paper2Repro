@@ -21,14 +21,24 @@ def run(script, *args, stdin=None):
     return p.returncode, p.stdout + p.stderr
 
 
-def results_case(tmp, name, mutate):
+def results_case(tmp, name, mutate, *extra):
     data = json.load(open(EXAMPLE))
     mutate(data)
     path = os.path.join(tmp, f"{name}.json")
     json.dump(data, open(path, "w"))
     # Inside the fossil repository the example's renders exist; elsewhere skip that check.
     root = os.path.join(HERE, "..", "..", "..", "..", "PMC1847688")
-    return run("check_results.py", path, "--write", *(["--root", root] if os.path.isdir(root) else ["--skip-files"]))
+    return run("check_results.py", path, "--write", *extra, *(["--root", root] if os.path.isdir(root) else ["--skip-files"]))
+
+
+def verdict_after(tmp, name, mutate, iid, *extra):
+    """(verdict, basis, summary, output) of one item after check_results.py --write, or (None, None, None, output)."""
+    rc, out = results_case(tmp, name, mutate, *extra)
+    if rc != 0:
+        return None, None, None, out
+    d = json.load(open(os.path.join(tmp, f"{name}.json")))
+    i = item(d, iid)
+    return i.get("verdict"), i.get("basis"), d["summary"], out
 
 
 def item(data, iid):
@@ -97,6 +107,95 @@ def main():
         got = item(json.load(open(os.path.join(tmp, "paper_error.json"))), "text.plasma_totals").get("verdict") if rc == 0 else out
         if got != "exact":
             failures.append(f"paper-error exception: {got}")
+
+        # 0.7.0: the noise band. Cases from fossil's reviewer overrides, where the printed digits were too strict.
+        def one_field(d, expected, observed, noise):
+            t = item(d, "text.plasma_totals")
+            t["values"]["fields"] = [{"name": "f", "expected": expected, "observed": observed, **({"noise": noise} if noise is not None else {})}]
+        noise_cases = {
+            # PMC3392844 text.indication: 0.9111 against 0.9110, inside our seed range
+            "seed range": (("0.9110", 0.9111, {"runs": [0.9109, 0.9111, 0.9112]}), "agrees"),
+            # PMC522806 Fig. 4 colon: 3 of 62 samples, the paper gives no folds or seeds
+            "three of 62 samples": (("91.94", 87.10, {"samples": 3, "n": 62, "scale": 100, "why": "no folds or seeds given"}), "agrees"),
+            # PMC2661051 Table 5: one rate outside the band at 2 Monte Carlo SE is back inside
+            "two Monte Carlo SE": (("0.050", 0.056, {"mc_se": 0.0035}), "agrees"),
+            "outside every band": (("0.9110", 0.9200, {"runs": [0.9109, 0.9112]}), "differs"),
+            "no band, printed digits only": (("0.9110", 0.9111, None), "differs"),
+        }
+        for name, (args, want) in noise_cases.items():
+            got, basis, _, out = verdict_after(tmp, "noise_" + name.replace(" ", "_"), lambda d, a=args: one_field(d, *a), "text.plasma_totals")
+            if got != want:
+                failures.append(f"noise band, {name}: {got}, expected {want} {out if got is None else ''}")
+            elif want == "agrees" and not (basis or "").startswith("within noise"):
+                failures.append(f"noise band, {name}: basis {basis!r} should say within noise")
+        for name, noise in {
+            "more than three samples": {"samples": 4, "n": 62, "scale": 100, "why": "no folds"},
+            "samples without saying what the paper leaves out": {"samples": 2, "n": 62, "scale": 100},
+            "one run is not a spread": {"runs": [0.9111]},
+            "noise with nothing in it": {},
+        }.items():
+            rc, out = results_case(tmp, "badnoise", lambda d, n=noise: one_field(d, "0.9110", 0.9111, n))
+            if rc == 0:
+                failures.append(f"check_results.py accepted: {name}")
+
+        # 0.7.0: claims. An item whose claims hold agrees when its cause is explained; with an open cause a person decides.
+        claim = {"id": "c1", "text": "Most classes are rare", "where": "Results, p. 5", "items": ["fig9.b"],
+                 "test": "share of classes in the first bar", "result": "holds"}
+        explain = lambda d: item(d, "fig9.b")["cause"].update(status="explained", category="data_differs", evidence=["notes.md"])  # noqa: E731
+        got, basis, summary, out = verdict_after(tmp, "claim_explained", lambda d: (d.update(claims=[claim]), explain(d)), "fig9.b")
+        if got != "agrees" or not (basis or "").startswith("claim holds") or summary.get("claims") != {"fails": 0, "holds": 1, "partly": 0}:
+            failures.append(f"a claim that holds on an explained gap: {got} {basis!r} {summary} {out if got is None else ''}")
+        got, basis, summary, out = verdict_after(tmp, "claim_open", lambda d: d.update(claims=[claim]), "fig9.b")
+        if got != "partly" or summary.get("for_review") != 1 or "REVIEW fig9.b" not in out:
+            failures.append(f"a claim that holds on an open gap should go to a person: {got} {summary} {out}")
+        got, _, _, out = verdict_after(tmp, "claim_partly", lambda d: (d.update(claims=[{**claim, "result": "partly"}]), explain(d)), "fig9.b")
+        if got != "partly":
+            failures.append(f"a claim that only partly holds should raise nothing: {got} {out if got is None else ''}")
+        for name, c in {
+            "claim resting on no item": {**claim, "items": []},
+            "claim resting on a missing item": {**claim, "items": ["fig99"]},
+            "claim without a test": {**claim, "test": ""},
+            "claim with an unknown result": {**claim, "result": "mostly"},
+        }.items():
+            rc, out = results_case(tmp, "badclaim", lambda d, c=c: d.update(claims=[c]))
+            if rc == 0:
+                failures.append(f"check_results.py accepted: {name}")
+
+        # 0.7.0: a review sets the verdict and must say why.
+        review = {"verdict": "agrees", "computed": "partly", "by": "someone", "url": "https://example.org/r/1",
+                  "reason": {"kind": "noise", "text": "within 1 to 3 samples; the paper gives no folds"}}
+        got, _, summary, out = verdict_after(tmp, "review_ok", lambda d: item(d, "fig9.b").update(review=review), "fig9.b")
+        if got != "agrees" or summary.get("reviewed") != 1:
+            failures.append(f"a review with a reason: {got} {summary} {out if got is None else ''}")
+        follows = {**review, "reason": {"kind": "follows", "item": "fig2", "text": "the same numbers as Fig. 2, accepted"}}
+        got, _, _, out = verdict_after(tmp, "review_follows", lambda d: item(d, "fig9.b").update(review=follows), "fig9.b")
+        if got != "agrees":
+            failures.append(f"a review that follows another item: {got} {out}")
+        for name, r in {
+            "review without a reason": {k: v for k, v in review.items() if k != "reason"},
+            "review 'without comment'": {**review, "reason": {"kind": "judgment", "text": "Review card: Agrees, without comment."}},
+            "review that only restates the change": {**review, "reason": {"kind": "judgment", "text": "Partly → Agrees."}},
+            "review that restates the change after a label": {**review, "reason": {"kind": "judgment", "text": "Review: Fig. 1 Partly to Agrees."}},
+            "review pointing to a comment": {**review, "reason": {"kind": "judgment", "text": "Set per review comment #6000027304."}},
+            "review with an unknown kind": {**review, "reason": {"kind": "vibes", "text": "looks fine to me"}},
+            "follows naming no item": {**review, "reason": {"kind": "follows", "text": "as Table 3"}},
+            "review of a verdict the numbers no longer give": {**review, "computed": "differs"},
+        }.items():
+            rc, out = results_case(tmp, "badreview", lambda d, r=r: item(d, "fig9.b").update(review=r))
+            if rc == 0:
+                failures.append(f"check_results.py accepted: {name}")
+        # A review already on main without a reason warns; a changed one fails.
+        old = {k: v for k, v in review.items() if k != "reason"}
+        base = os.path.join(tmp, "base.json")
+        data = json.load(open(EXAMPLE))
+        item(data, "fig9.b")["review"] = old
+        json.dump(data, open(base, "w"))
+        rc, out = results_case(tmp, "review_on_main", lambda d: item(d, "fig9.b").update(review=old), "--base", base)
+        if rc != 0 or "WARN fig9.b" not in out:
+            failures.append(f"an unchanged review on main without a reason should warn, not fail: {out}")
+        rc, out = results_case(tmp, "review_changed", lambda d: item(d, "fig9.b").update(review={**old, "by": "someone-else"}), "--base", base)
+        if rc == 0:
+            failures.append("a changed review without a reason should fail even with --base")
 
         # skill_version.py: the block comes from VERSION; it replaces an old one and keeps the rest.
         version = open(os.path.join(HERE, "..", "VERSION")).read().strip()
