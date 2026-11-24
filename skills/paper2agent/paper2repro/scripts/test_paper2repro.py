@@ -196,6 +196,14 @@ def main():
         rc, out = results_case(tmp, "review_changed", lambda d: item(d, "fig9.b").update(review={**old, "by": "someone-else"}), "--base", base)
         if rc == 0:
             failures.append("a changed review without a reason should fail even with --base")
+        # A --base that is not there says so, and every review is checked as new (a new paper has no file on main).
+        missing = os.path.join(tmp, "not-on-main.json")
+        rc, out = results_case(tmp, "base_missing", lambda d: item(d, "fig9.b").update(review=review), "--base", missing)
+        if rc != 0 or f"WARN --base {missing} not found" not in out:
+            failures.append(f"a missing --base should warn and check every review as new: {out}")
+        rc, out = results_case(tmp, "base_missing_old", lambda d: item(d, "fig9.b").update(review=old), "--base", missing)
+        if rc == 0 or "not found" not in out:
+            failures.append(f"with a missing --base, a review without a reason should fail: {out}")
 
         # skill_version.py: the block comes from VERSION; it replaces an old one and keeps the rest.
         version = open(os.path.join(HERE, "..", "VERSION")).read().strip()

@@ -430,7 +430,9 @@ def main():
     root = None if args.skip_files else args.root or os.path.dirname(os.path.abspath(args.results))
     errors, stale, rows, warnings, for_review = [], [], [], [], []
     old_reviews = {}
-    if args.base and os.path.exists(args.base):
+    if args.base and not os.path.exists(args.base):
+        print(f"WARN --base {args.base} not found: every review is checked as new", file=sys.stderr)
+    elif args.base:
         with open(args.base, encoding="utf-8") as f:
             old_reviews = {i.get("id"): i["review"] for i in json.load(f).get("items") or [] if isinstance(i.get("review"), dict)}
 

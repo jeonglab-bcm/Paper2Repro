@@ -115,7 +115,7 @@ A reviewer overrules a computed verdict with the item's `review` block:
 - `computed` is the verdict the reviewer saw. When the numbers later give another one, the check fails until the item is reviewed again.
 - `reason.kind` is `noise`, `paper_error`, `follows` (with `reason.item`, the id of the accepted item it follows), `data_release` or `judgment`.
 - `reason.text` says why. "Without comment", "per review comment …" and a bare "Partly → Agrees." are refused: a reason written once becomes a rule the checker can apply the next time. 51 of fossil's first 82 overrides had none.
-- `check_results.py --base <the file on main>` lets reviews already on main warn instead of fail until their reason is filled in. A new or changed review always needs one.
+- `check_results.py --base <the file on main>` lets reviews already on main warn instead of fail until their reason is filled in. A new or changed review always needs one. When that file is not there (a new paper), the check says so and treats every review as new.
 
 ## Layout
 
