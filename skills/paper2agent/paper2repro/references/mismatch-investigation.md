@@ -13,8 +13,19 @@ Every item that is not `exact` ends with a cause in `results.json`. "Close enoug
    5. The paper is wrong: a rounding slip, a rank that contradicts its own scores, a caption that names the wrong panel.
    6. Nondeterminism or platform: seeds, parallel order, optimizer stopping rules, compiled arithmetic.
 3. **Test each with a command whose result is recorded**: what you ran, what it gave. Keep scripts that bear on the result in `pipeline/` so the pipeline reruns them; one-off searches go in a JSON record under `output/` with a README line saying they are not part of the pipeline.
-4. **Stop** when one hypothesis closes the gap quantitatively (removing the cause makes the item match): status `explained`. Otherwise, when the plausible hypotheses are tested, status `open` with at least two of them recorded as rejected or inconclusive.
+4. **Stop** when one hypothesis closes the gap quantitatively (removing the cause makes the item match): status `explained`. Otherwise, when the plausible hypotheses are tested and the four searches of [Before you stop](#before-you-stop) are done, status `open` with at least two of them recorded as rejected or inconclusive.
 5. **Write it once**: the cause in `results.json`, the explanation in the paper's README (Details or Limits), the one-liner in the pull request.
+
+## Before you stop
+
+Four searches come before a cause is left `open` or an item is marked `not_attempted`, because past reproductions stopped short of each and a reviewer later found the answer there. From release 0.8.0, `check_results.py` refuses an open cause or a not-attempted item without them (a `not_a_result` item, such as a diagram, is exempt). Record each in `cause.checklist` as what you did and what you found, or as `"n/a: <why it does not apply>"` ([results-json.md](results-json.md#causes)). A search that turns something up is also a hypothesis: test it and record it in `hypotheses`.
+
+| Entry | Search |
+| --- | --- |
+| `wayback` | The Wayback Machine (`https://web.archive.org/web/*/<url>*`) for every URL the paper, its supplement and the authors' pages give for code and data, including lab pages and FTP folders that no longer answer. In fossil #38 (PMC2711306) the "lost" Matlab and the yeast test data were both there, in 2016 and 2010 captures. If the Wayback Machine is blocked from the session, say so in the entry and in the pull request, so that someone with access can search it; that is not a search done. |
+| `references` | The settings in the papers the methods section cites for a step ("as in [12]", "following [7]"): parameter values, preprocessing, the version of a database. Try them as hypotheses before calling a setting undocumented. |
+| `leakage` | Whether the paper's numbers could come from information the method should not have seen: test rows in the training folds, feature selection or tuning on all the data before cross-validation, duplicates across splits. A paper that leaks usually scores better than an honest rerun, so test the leaky variant: if it closes the gap, that is the cause. `n/a` when nothing is trained or selected. |
+| `convergence` | Whether our run converged where the paper's did: rerun at the paper's stated iteration count, tolerance or chain length (and at ten times it), and compare. An optimizer or sampler stopped early, or run longer than the authors', moves numbers without any setting being wrong. `n/a` when nothing iterates. |
 
 ## When several inputs differ
 

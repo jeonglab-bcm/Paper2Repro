@@ -41,7 +41,7 @@ One file per paper, `<id>/results.json`, schema `paper2repro/results/v1`. It is 
 | `values` | `fields` [{`name`, `expected`, `observed`, optional `tolerance`, optional `noise`}], `tolerance` ({`printed`: true} or {`abs`: x} or {`rel`: x}), optional `exceptions` [{`field`, `category`, `evidence`}]. See "Noise band". |
 | `check` | `passed`, `detail`: for executable checks such as a port against the original code. |
 | `assumptions` | [{`what`, `source`: `paper`, `authors_code`, `our_choice`, `read_from_figure` or `found_by_search`, `sensitivity`}]. Anything not taken from the paper or the authors' code goes here. |
-| `cause` | {`category`, `summary`, `evidence` [paths or URLs], `hypotheses` [{`hypothesis`, `test`, `result`: `supported`, `rejected` or `inconclusive`}], `status`: `explained` or `open`}. |
+| `cause` | {`category`, `summary`, `evidence` [paths or URLs], `hypotheses` [{`hypothesis`, `test`, `result`: `supported`, `rejected` or `inconclusive`}], `status`: `explained` or `open`, `checklist` {`wayback`, `references`, `leakage`, `convergence`}}. |
 | `layout` | How a figure of ours sits on the published frame: `{"drawn_on_published": true}`, or `panel_size_difference_px`, `ink_outside_frame` and `axes` [{`axis`, optional `scale`: `log`, `published`, `ours`}] for a new drawing, or `{"not_comparable": "<why>"}`. See "Layout". |
 | `outputs` | Paths, relative to the paper folder, of the render and overlay of a scored figure. |
 | `review` | Set by a reviewer, never by the agent: {`verdict`, `computed`, `by`, `url`, `reason`: {`kind`, `text`}}. See "Reviews". |
@@ -160,6 +160,17 @@ Required for `partly`, `inconclusive`, `differs` and `not_attempted`; allowed on
 | `unknown` | Only with status `open`. |
 
 `explained` needs evidence or a supported hypothesis. `open` needs at least two hypotheses tested and not supported, so the reader sees what was ruled out.
+
+From release 0.8.0, an `open` cause, and the cause of a `not_attempted` item, also need `checklist`: the four searches of [mismatch-investigation.md](mismatch-investigation.md#before-you-stop), each a sentence on what was done and found, or `"n/a: <why>"`. A bare `"n/a"` is refused. Category `not_a_result` needs none. A results.json made with an earlier release is not asked for it, but a checklist it does give is checked.
+
+```json
+"checklist": {
+  "wayback": "the lab page and FTP folder in the Availability section: a 2012 capture has the source archive (now in sources/, H3)",
+  "references": "ref. 12's window and threshold, which the methods cite for this step, tried as H2: rejected",
+  "leakage": "n/a: nothing is trained, tuned or selected",
+  "convergence": "rerun at the paper's 1,000 iterations and at 10,000: values unchanged at printed precision"
+}
+```
 
 ## Producing the file
 
