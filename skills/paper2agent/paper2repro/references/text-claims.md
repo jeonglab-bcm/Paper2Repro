@@ -19,7 +19,7 @@ Label each column with its kind wherever more than one kind is shown: tables, pa
    - A comparison: `"expected": "yes"`, and `observed` is `"yes"` or `"no"` from a comparison our code computes.
    - A significance call: `"expected": "not significant"`, and `observed` is computed from our p at the paper's α (0.05 unless the paper states another).
 2. **Recompute every claim from the paper's own tables first.** If a claim does not come back, our formula is wrong: fix it. If our formula follows the methods and the text still disagrees with the paper's own tables, record a `paper_error` exception with evidence.
-3. **Compute ours and let `check_results.py` set the verdict.** Do not widen a tolerance to turn a near miss into a match. A near miss is a field that does not match, with its gap explained in the cause.
+3. **Compute ours and let `check_results.py` set the verdict.** Do not widen a tolerance to turn a near miss into a match. A near miss is a field that does not match, with its gap explained in the cause. When our own runs vary (seeds, Monte Carlo replicates), measure that and record it as the field's `noise` ([results-json.md](results-json.md), "Noise band"): a measured band is not a widened tolerance.
 4. **Record the parts of a comparison as fields too.** A comparison can hold while the numbers it compares do not. In PMC2349296 "RelEx varies more between corpora than between the methods" holds on our run (19.5 against 8.2 points), but the gap between the methods is 8.2 points against the paper's 13. With all three fields in one item, it is `partly`, not `exact`.
 5. **Find the cause of each claim that does not match** with [mismatch-investigation.md](mismatch-investigation.md), section "When several inputs differ". Run the sensitivity variants there, as hypothesis tests.
 
@@ -27,3 +27,7 @@ Label each column with its kind wherever more than one kind is shown: tables, pa
 
 - Generate every sentence about a claim from `results.json`, as for figures. A sentence that cites a number cites the number from the "ours" kind, unless it says which other kind it is.
 - End the claims section of the README and the results page with one line: the verdict on the paper's main claim, and the causes of the claims that do not match. PMC2349296: "The main finding of the paper holds. Some summary values do not agree. The two causes in item 5 explain these differences."
+
+## The paper's conclusions: `claims`
+
+The `text.*` items score the numbers a sentence prints. The paper's conclusions are listed apart, in the top-level `claims` of `results.json`, each resting on the items behind it ([results-json.md](results-json.md), "Claims"). Write the list in phase 1, from the abstract, the results and the discussion, before you compute ours, and give each claim a test our code computes. When every claim resting on an item holds and the item's gap is explained, the item agrees; when the gap is still open, a person decides.
