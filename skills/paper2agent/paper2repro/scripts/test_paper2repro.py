@@ -7,6 +7,7 @@
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,38 @@ def main():
             rc, out = results_case(tmp, name.replace(" ", "_"), mutate)
             if rc == 0:
                 failures.append(f"check_results.py accepted: {name}")
+        # From 0.8.0 an open cause, or a not-attempted item that had something to lose, carries the checklist.
+        done = {"wayback": "web.archive.org searched for the lab page: no capture", "references": "ref. 12's settings tried (H3)",
+                "leakage": "n/a: no training step", "convergence": "rerun at the paper's 500 iterations: same counts"}
+
+        def at_080(d, checklist=True):
+            d["skill"].update(version="0.8.0", tag="paper2repro-v0.8.0")
+            for i in d["items"]:
+                c = i.get("cause") or {}
+                if checklist and (c.get("status") == "open" or i.get("verdict") == "not_attempted") and c.get("category") != "not_a_result":
+                    c["checklist"] = dict(done)
+        for name, mutate in {
+            "0.8.0 with every checklist": at_080,
+            "0.7.0 needs no checklist": lambda d: d["skill"].update(version="0.7.0", tag="paper2repro-v0.7.0"),
+            "0.8.0: a diagram not attempted needs no checklist": lambda d: (at_080(d), item(d, "fig1")["cause"].pop("checklist", None)),
+        }.items():
+            rc, out = results_case(tmp, re.sub(r"\W+", "_", name), mutate)
+            if rc != 0:
+                failures.append(f"check_results.py refused {name}: {out}")
+        for name, mutate in {
+            "0.8.0 open cause without a checklist": lambda d: (at_080(d), item(d, "fig9.b")["cause"].pop("checklist")),
+            "0.8.0 not attempted without a checklist": lambda d: (at_080(d), item(d, "fig9.c")["cause"].pop("checklist")),
+            "checklist with a bare n/a": lambda d: (at_080(d), item(d, "fig9.b")["cause"]["checklist"].update(leakage="n/a")),
+            "checklist missing convergence": lambda d: (at_080(d), item(d, "fig9.b")["cause"]["checklist"].pop("convergence")),
+            "checklist with an unknown entry": lambda d: (at_080(d), item(d, "fig9.b")["cause"]["checklist"].update(vibes="fine")),
+            "a checklist given before 0.8.0 is still checked": lambda d: item(d, "fig9.b")["cause"].update(checklist={"wayback": ""}),
+        }.items():
+            rc, out = results_case(tmp, re.sub(r"\W+", "_", name), mutate)
+            if rc == 0:
+                failures.append(f"check_results.py accepted: {name}")
+            elif "checklist" not in out:
+                failures.append(f"check_results.py refused {name} for another reason: {out[:300]}")
+
         # A paper-error exception turns a 2-of-3 table into an exact one.
         def paper_error(d):
             v = item(d, "text.plasma_totals")["values"]
@@ -270,6 +303,32 @@ def main():
                 failures.append(f"session_ledger.py {k}: {led.get(k)}, expected {v} ({out[:200]})")
         if led.get("tokens", {}).get("output") != 9:
             failures.append(f"session_ledger.py should keep the last usage of a message: {led.get('tokens')}")
+
+        # session_ledger.py masks personal details as it writes, and --check finds any left.
+        rows = [
+            {"type": "user", "timestamp": "2026-01-01T00:00:00Z", "sessionId": "s2", "message": {"role": "user", "content":
+                "I am Jane Q. Doe (jane.doe@example.edu); my files are in /Users/jdoe/papers and C:\\Users\\jdoe\\x"}},
+            {"type": "assistant", "timestamp": "2026-01-01T00:00:05Z", "message": {"id": "m1", "model": "m", "usage": {"output_tokens": 1},
+                "content": [{"type": "text", "text": "Thanks, JANE Q. DOE. Reading /home/jdoe/papers (git@github.com:org/repo); token ghp_" + "a" * 30}]}},
+        ]
+        tr = os.path.join(tmp, "s2.jsonl")
+        open(tr, "w").write("\n".join(json.dumps(r) for r in rows))
+        out_dir = os.path.join(tmp, "ledger2")
+        rc, out = run("session_ledger.py", "--transcript", tr, "--out", out_dir, "--redact", "Jane Q. Doe", "--project-dir", tmp)
+        written = "".join(open(os.path.join(out_dir, n)).read() for n in ("ledger.json", "conversation.md")) if rc == 0 else out
+        for leak in ("Jane", "JANE", "jane.doe@", "/Users/jdoe", "/home/jdoe", "jdoe\\", "ghp_"):
+            if leak in written:
+                failures.append(f"session_ledger.py left {leak!r} in the ledger: {written[:400]}")
+        if rc == 0 and "git@github.com:org/repo" not in written:
+            failures.append("session_ledger.py should keep a git SSH remote, which is not an email")
+        rc, out = run("session_ledger.py", "--check", out_dir, "--redact", "Jane Q. Doe", "--project-dir", tmp)
+        if rc != 0:
+            failures.append(f"session_ledger.py --check should pass on a masked ledger: {out}")
+        with open(os.path.join(out_dir, "conversation.md"), "a") as f:
+            f.write("\nadded by hand: jane.doe@example.edu, Jane Q. Doe\n")
+        rc, out = run("session_ledger.py", "--check", out_dir, "--redact", "Jane Q. Doe", "--project-dir", tmp)
+        if rc == 0 or "email" not in out or "name" not in out:
+            failures.append(f"session_ledger.py --check should find the email and the name added by hand: {out}")
 
         # check_package.py: notebook comparison, TUTORIAL.md rendering, and the template's layout.
         sys.path.insert(0, HERE)

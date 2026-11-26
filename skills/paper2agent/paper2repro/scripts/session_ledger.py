@@ -12,9 +12,14 @@ Usage:
   session_ledger.py --session-id <id> --out PMC1234567/session
   session_ledger.py --transcript <path.jsonl> --out DIR
   session_ledger.py --from-hook --out DIR                      # Stop hook: reads the hook JSON on stdin
+  session_ledger.py --out DIR --redact "Jane Doe" --redact jdoe  # also mask these names
+  session_ledger.py --check PMC1234567/session                   # exit 1 if a personal detail is left
 
-Standard library only. Thinking blocks and tool outputs are left out; strings that look
-like credentials are masked.
+Standard library only. Thinking blocks and tool outputs are left out. Personal details are masked
+as the files are written, never afterwards: strings that look like credentials, email addresses,
+home folders (/Users/<name>, /home/<name>, C:\\Users\\<name> become ~), the git user.name and
+user.email of the project, and every --redact term (also PAPER2REPRO_REDACT, separated by commas).
+--check scans written files for the same patterns, for a pre-commit hook or CI.
 """
 
 import argparse
@@ -23,6 +28,7 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 
 SECRET = re.compile(
@@ -30,10 +36,51 @@ SECRET = re.compile(
     r"|xox[abposr]-[A-Za-z0-9-]{10,}|(?i:bearer)\s+[A-Za-z0-9._-]{20,})"
 )
 TOKEN_KEYS = ("input", "cache_creation", "cache_read", "output", "thinking")
+EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])(?!git@)[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+HOME = re.compile(r"(?:/Users/|/home/|[A-Za-z]:\\{1,2}Users\\{1,2})(?!Shared\b)[A-Za-z0-9._-]+")
+PERSONAL = []  # names and handles of the people in the session, filled in main()
 
 
 def mask(text):
-    return SECRET.sub("[redacted]", text)
+    text = SECRET.sub("[redacted]", text)
+    for term in PERSONAL:
+        text = re.sub(re.escape(term), "[name]", text, flags=re.IGNORECASE)
+    text = EMAIL.sub("[email]", text)
+    return HOME.sub("~", text)
+
+
+def personal_terms(project, extra):
+    """The git identity of the project and the terms given, longest first so a full name goes before a part."""
+    terms = [t.strip() for t in extra if t and t.strip()]
+    terms += [t.strip() for t in os.environ.get("PAPER2REPRO_REDACT", "").split(",") if t.strip()]
+    for key in ("user.name", "user.email"):
+        try:
+            out = subprocess.run(["git", "-C", project, "config", key], capture_output=True, text=True, timeout=10)
+            if out.returncode == 0 and out.stdout.strip():
+                terms.append(out.stdout.strip())
+        except (OSError, subprocess.SubprocessError):
+            pass
+    # Bot identities are not personal.
+    terms = [t for t in terms if len(t) >= 3 and not re.search(r"\b(?:noreply|bot|claude|github-actions)\b", t, re.I)]
+    return sorted(set(terms), key=len, reverse=True)
+
+
+def check(folder, terms):
+    """What looks personal in the written ledger files: [(file, line, what)]."""
+    found = []
+    for name in ("ledger.json", "conversation.md"):
+        path = os.path.join(folder, name)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            for n, line in enumerate(f, 1):
+                for what, pat in (("credential", SECRET), ("email", EMAIL), ("home folder", HOME)):
+                    for m in pat.finditer(line):
+                        found.append((name, n, f"{what} {m.group(0)[:40]!r}"))
+                for t in terms:
+                    if t.lower() in line.lower():
+                        found.append((name, n, f"name {t!r}"))
+    return found
 
 
 def project_dir(cwd):
@@ -162,12 +209,26 @@ def total(usages):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", required=True, help="folder for ledger.json and conversation.md")
+    ap.add_argument("--out", help="folder for ledger.json and conversation.md")
     ap.add_argument("--transcript")
     ap.add_argument("--session-id")
     ap.add_argument("--project-dir", default=os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
     ap.add_argument("--from-hook", action="store_true")
+    ap.add_argument("--redact", action="append", default=[], metavar="TERM",
+                    help="a name or handle to mask, case-insensitive (repeat for more)")
+    ap.add_argument("--check", metavar="DIR", help="scan DIR's ledger.json and conversation.md instead of writing them")
     args = ap.parse_args()
+    PERSONAL[:] = personal_terms(args.project_dir, args.redact)
+    if args.check:
+        found = check(args.check, PERSONAL)
+        for name, n, what in found:
+            print(f"{os.path.join(args.check, name)}:{n}: {what}", file=sys.stderr)
+        if found:
+            sys.exit(f"{len(found)} personal detail(s) left; rewrite the ledger (with --redact for names) before committing")
+        print(f"{args.check}: no personal details found")
+        return
+    if not args.out:
+        ap.error("--out is required unless --check is given")
 
     path = find_transcript(args)
     rows = read_jsonl(path)

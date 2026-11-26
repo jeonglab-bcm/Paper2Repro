@@ -40,6 +40,11 @@ CAUSES = {
     "not_a_result", "metric_resolution", "unknown",
 }
 NEEDS_CAUSE = {"partly", "inconclusive", "differs", "not_attempted"}
+# Searched before a cause is left open or an item not attempted (mismatch-investigation.md, "Before you
+# stop"): each is what was done and found, or "n/a: <why it does not apply>". Required from CHECKLIST_FROM.
+CHECKLIST = ("wayback", "references", "leakage", "convergence")
+CHECKLIST_FROM = (0, 8, 0)
+NO_CHECKLIST = {"not_a_result"}  # a diagram, or no reusable method: nothing was lost to look for
 PICTURES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 FRAME_PX = 2  # how far the panel of ours may be from the published size and still be on its frame
 INK_OUTSIDE = 0.01  # share of our ink that may fall outside the published picture
@@ -282,7 +287,27 @@ def check_layout(item, errors):
                           "draw ours with the published limits, and count the points that fall outside")
 
 
-def check_cause(item, verdict, errors):
+def check_checklist(iid, cause, verdict, required, errors):
+    checklist = cause.get("checklist")
+    needed = required and (cause.get("status") == "open" or verdict == "not_attempted") \
+        and cause.get("category") not in NO_CHECKLIST
+    if checklist is None:
+        if needed:
+            errors.append(f"{iid}: an open cause or a not-attempted item needs cause.checklist with {', '.join(CHECKLIST)} "
+                          "(what was searched and found, or \"n/a: why\")")
+        return
+    if not isinstance(checklist, dict):
+        errors.append(f"{iid}: cause.checklist must be an object with {', '.join(CHECKLIST)}")
+        return
+    for k in CHECKLIST:
+        v = checklist.get(k)
+        if not isinstance(v, str) or not v.strip() or v.strip().lower() in ("n/a", "n/a:", "na", "none", "-"):
+            errors.append(f"{iid}: cause.checklist.{k} must say what was done and found, or \"n/a: why\"")
+    for k in sorted(set(checklist) - set(CHECKLIST)):
+        errors.append(f"{iid}: cause.checklist.{k} is not one of {', '.join(CHECKLIST)}")
+
+
+def check_cause(item, verdict, errors, checklist_required=False):
     iid, cause = item.get("id", "?"), item.get("cause")
     if verdict not in NEEDS_CAUSE and not cause:
         return
@@ -308,6 +333,7 @@ def check_cause(item, verdict, errors):
             errors.append(f"{iid}: an open cause needs at least two tested hypotheses (what was ruled out)")
     else:
         errors.append(f"{iid}: cause.status must be explained or open")
+    check_checklist(iid, cause, verdict, checklist_required, errors)
 
 
 def check_claims(data, ids, errors):
@@ -386,7 +412,7 @@ def apply_review(item, computed, measure, errors, warnings, old_reviews, ids):
     return r["verdict"], f"{measure}; computed {computed.replace('_', ' ')}, reviewer {r['verdict']}"
 
 
-def check_item(item, root, errors):
+def check_item(item, root, errors, checklist_required=False):
     iid = item.get("id")
     if not iid:
         errors.append("an item has no id")
@@ -411,7 +437,7 @@ def check_item(item, root, errors):
     check_layout(item, errors)
     verdict, measure = verdict_of(item, errors)
     if verdict:
-        check_cause(item, verdict, errors)
+        check_cause(item, verdict, errors, checklist_required)
     return verdict, measure
 
 
@@ -454,6 +480,8 @@ def main():
         errors.append("skill is missing or has no version: run the installed skill's scripts/skill_version.py on this file")
     elif skill.get("tag") != f"paper2repro-v{skill['version']}":
         errors.append(f"skill.tag must be paper2repro-v{skill['version']}")
+    version = str(skill.get("version", ""))
+    checklist_required = bool(re.fullmatch(SEMVER, version)) and tuple(map(int, version.split("."))) >= CHECKLIST_FROM
 
     items = data.get("items") or []
     if not items:
@@ -466,7 +494,7 @@ def main():
     counts = dict.fromkeys(VERDICTS, 0)
     open_causes = reviewed = 0
     for item in items:
-        verdict, measure = check_item(item, root, errors)
+        verdict, measure = check_item(item, root, errors, checklist_required)
         if not verdict:
             continue
         verdict, measure = apply_claims(item, verdict, measure, claims_of.get(item.get("id"), []), for_review)

@@ -25,6 +25,15 @@ Keep `process.errorStrategy = 'terminate'` and `stageInMode = 'copy'` (scripts w
 - Use sources that accept scripted downloads, with a fallback: Springer/BMC `media.springernature.com/original/...` files; PMC's open-access copy on AWS (`https://pmc-oa-opendata.s3.amazonaws.com/<PMCID>.<version>/<file>`); Europe PMC (`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/supplementaryFiles`, a zip of all supplements). PLOS refuses scripted downloads; Europe PMC has returned HTTP 500 to CI runners. Retry with `curl --retry 3`.
 - If an archive is damaged (a failed CRC), say which file and line, and handle it in code, as PMC1847688 does for one line of `SOL_calib_08e.txt`.
 
+## The CI image
+
+In fossil, a reproduction runs, and is checked, in the repository's pinned CI image: built from fossil's `Dockerfile`, published to GHCR and named in the workflow **by digest** (`<image>@sha256:<digest>`), never by a tag that can move. The image holds what changes numbers from one runner to the next and that no `requirements.txt` pins: the OpenBLAS build and its CPU kernel, fonts, the locale, R with a dated CRAN snapshot, Java and Nextflow 26. Copy the `container:` line, digest included, from the newest `reproduce-*.yml` on fossil's `main`.
+
+- **A fix to the environment goes into the image, not into the paper.** When a run needs a kernel setting, a font, a locale, a system library or a CRAN package, open a pull request on fossil's `Dockerfile`, and use the new digest once it is built. Do not set it only in the paper's workflow or `nextflow.config`. In fossil #37 (PMC2850872) the reproduce job passed on some runners and failed on others, because OpenBLAS picks its kernel by CPU; the fix, `OPENBLAS_CORETYPE=Haswell`, went into that paper's `nextflow.config`. It has since been copied by hand into the configs of PMC2711306 (#38), PMC522806 and PMC4079617, and a paper that misses it passes or fails by runner.
+- Python packages are still installed from the paper's `requirements.txt`, pinned with `==`; the image holds the runtimes and system libraries beneath them.
+- Record the image digest in the README's Run section, next to the runtime versions.
+- Until fossil's image exists (fossil #133), use the setup actions in the template below, pin each runtime version, and switch to the image when it lands.
+
 ## Pinning
 
 Pin what the scores depend on: `requirements.txt` with `==` versions installed by the workflow; R packages by version or archive URL; the runtime versions (Python, R, Octave, Java, Nextflow) in the workflow and in `results.json`. The PNGs embedded in PMC1847688's committed results page already differ in bytes from a rerun's, though not in pixels; that is why `compare_runs.py` compares decoded pixels. Numeric libraries can move the scores themselves.
@@ -69,19 +78,15 @@ permissions:
 jobs:
   reproduce:
     runs-on: ubuntu-24.04
+    container: <fossil CI image>@sha256:<digest>  # copied from the newest reproduce-*.yml on main
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
       - run: pip install -r <PMCID>/figure-reproduction/requirements.txt ./<PMCID>/package
-      - uses: astral-sh/setup-uv@v6  # check_package.py builds and installs the package with uv
-      # R package instead: drop ./<PMCID>/package above, add r-lib/actions/setup-r@v2 and
-      # r-lib/actions/setup-r-dependencies@v2 (working-directory: <PMCID>/package, extra-packages: any::rcmdcheck)
-      - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: "21"}
-      - uses: nf-core/setup-nextflow@v2
-        with: {version: "26.04.3"}
+      # R package instead: drop ./<PMCID>/package above and install it with pak in the image's R.
+      # Before the image exists (fossil #133): no container line; add actions/setup-python@v5 (3.12),
+      # astral-sh/setup-uv@v6, actions/setup-java@v4 (temurin 21), nf-core/setup-nextflow@v2 (26.04.3),
+      # and for R r-lib/actions/setup-r@v2 and setup-r-dependencies@v2 (extra-packages: any::rcmdcheck).
       - run: nextflow run <PMCID>/figure-reproduction/main.nf --outdir results -ansi-log false ${{ inputs.full && '--full' || '' }}
       - if: always()
         run: cat results/report.md >> "$GITHUB_STEP_SUMMARY" || echo "No report." >> "$GITHUB_STEP_SUMMARY"
