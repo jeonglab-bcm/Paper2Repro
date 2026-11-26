@@ -1,0 +1,88 @@
+# Copy to fossil as .github/workflows/paper2revise.yml. Setup: paper2revise/references/deploy.md.
+#
+# Starts a Paper2Revise run on the lab server when a reproduction pull request opens, and again
+# when someone adds the label `rereview`. Pushes by the run use FOSSIL_BOT_TOKEN, so the paper's
+# own CI runs on them; `synchronize` is not a trigger, so those pushes never start another review.
+name: Paper2Revise
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled]
+    paths:
+      - "PMC*/**"
+
+concurrency:
+  group: paper2revise-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    # Same-repository branches only: a fork's pull request must not run on the lab server.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'labeled' || github.event.label.name == 'rereview')
+    runs-on: [self-hosted, paper2revise]
+    timeout-minutes: 1440
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ secrets.FOSSIL_BOT_TOKEN }}
+      P2R_GH_TOKEN: ${{ secrets.PAPER2REPRO_BOT_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Drop the rereview label
+        if: github.event.action == 'labeled'
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label rereview
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.FOSSIL_BOT_TOKEN }}
+          fetch-depth: 0
+          path: fossil
+
+      - uses: actions/checkout@v4
+        with:
+          repository: jeonglab-bcm/Paper2Repro
+          ref: main
+          token: ${{ secrets.PAPER2REPRO_BOT_TOKEN }}
+          fetch-depth: 0
+          path: Paper2Repro
+
+      - name: Install the skill for this run
+        run: |
+          rm -rf "$HOME/.claude/skills/paper2agent"
+          mkdir -p "$HOME/.claude/skills/paper2agent"
+          cp -R Paper2Repro/skills/paper2agent/. "$HOME/.claude/skills/paper2agent/"
+
+      - name: Git identity
+        run: |
+          for d in fossil Paper2Repro; do
+            git -C "$d" config user.name "paper2revise[bot]"
+            git -C "$d" config user.email "paper2revise@users.noreply.github.com"
+          done
+
+      - name: Review and revise
+        working-directory: fossil
+        run: |
+          uv run --no-project \
+            --with-requirements "$GITHUB_WORKSPACE/Paper2Repro/skills/paper2agent/paper2revise/assets/requirements.txt" \
+            python "$GITHUB_WORKSPACE/Paper2Repro/skills/paper2agent/paper2revise/scripts/review_pr.py" \
+              --repo . --pr "$PR" \
+              --skill-root "$HOME/.claude/skills/paper2agent" \
+              --p2r "$GITHUB_WORKSPACE/Paper2Repro" \
+              --work "$RUNNER_TEMP/paper2revise-$PR" \
+              --budget 50 --rounds 5
+
+      - name: Keep the agents' records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper2revise-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/paper2revise-${{ github.event.pull_request.number }}/agents
+            ${{ runner.temp }}/paper2revise-${{ github.event.pull_request.number }}/gate-*.log
+            ${{ runner.temp }}/paper2revise-${{ github.event.pull_request.number }}/comment.md
+          if-no-files-found: ignore

@@ -1,6 +1,6 @@
 ---
 name: paper2agent
-description: Convert research papers and associated files, research code, or both into a reviewed paper skill and tested MCP server, reproduce a paper's computed figures and tables and compare them with the published versions, or find a paper whose software is lost and propose it to the fossil repository as an issue. Use for paper-only, code-only, combined, reproduction or nomination runs and resumes.
+description: Convert research papers and associated files, research code, or both into a reviewed paper skill and tested MCP server, reproduce a paper's computed figures and tables and compare them with the published versions, find a paper whose software is lost and propose it to the fossil repository as an issue, or review and revise a reproduction pull request until a blind review finds no blocking problem. Use for paper-only, code-only, combined, reproduction, review or nomination runs and resumes.
 ---
 
 # Paper2Agent
@@ -12,6 +12,7 @@ Route by the supplied inputs and requested outcome:
 - When both outputs are requested, follow both workflows.
 - To find a paper whose software has been lost and propose it to the fossil repository as a reproduction target (one issue in jeonglab-bcm/fossil, with a reproduction plan), follow [Paper2Fossil](paper2fossil/SKILL.md). It takes a PMCID, DOI or title, or only a description of the paper wanted. Its issues are what Paper2Repro later reproduces.
 - To reproduce computed figures or tables and compare them with the published versions, follow [Paper2Repro](paper2repro/SKILL.md). It also packages the paper's method as an installable Python or R package with an executed tutorial. It works with or without a code repository. When paper PDFs are supplied, build the paper skill first and read the paper from it.
+- To review, verify or revise a Paper2Repro pull request until a blind review finds no blocking problem (blind review of figures and claims, fixes on the branch, a clean rerun every round), follow [Paper2Revise](paper2revise/SKILL.md).
 
 Resolve each component's scripts and references relative to its own directory; bind `SKILL_ROOT` to that component. Keep their work directories separate. Independent paper and code tasks may run concurrently within host limits. Every MCP tool must bind to existing repository code.
 

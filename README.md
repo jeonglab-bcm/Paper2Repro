@@ -84,6 +84,17 @@ software is lost, and propose it to fossil.
 
 Posting needs [`gh`](https://cli.github.com/) logged in, or `GITHUB_TOKEN` set with permission to open issues in fossil.
 
+## 🔁 Review and Revise a Reproduction
+
+[Paper2Revise](skills/paper2agent/paper2revise/SKILL.md) checks a Paper2Repro pull request in fossil and keeps fixing it until a blind review finds no blocking problem. It runs unattended on the lab server through the Claude Agent SDK, started when a reproduction pull request opens.
+
+- **Every round starts from a clean rerun.** A fresh checkout runs the one-command Nextflow pipeline and `check_results.py`. A failure is a blocking finding.
+- **Reviewers are blind.** Two fresh agents with no edit tools and no access to the author's session review each round: one opens every overlay and checks the published frame and the scores, the other checks every sentence against the number it rests on.
+- **A script decides when to stop.** A fixer must answer every blocking finding: fixed, or `needs_human` with at least two tested hypotheses. A finding without an answer sends it back. It never lowers a verdict, changes data or loosens a pass mark.
+- **It stops** when a blind round is clean, when only `needs_human` findings are left, after 5 rounds, or at $50. It then comments, labels the pull request `paper2revise-clean` or `needs-human`, and opens or updates a Paper2Repro pull request with rule changes learned from the findings.
+
+Setup (runner, secrets, workflow): [deploy.md](skills/paper2agent/paper2revise/references/deploy.md).
+
 <a id="installation"></a>
 
 ## ⚙️ Installation & Setup
@@ -219,7 +230,7 @@ It writes to `--out`:
 
 | Workflow | Runs | Checks |
 | --- | --- | --- |
-| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), Paper2Fossil self-test (offline), a full `check_package.py` run on the package template, regression scorer and skill blinding, session log |
+| [Skill tests](.github/workflows/skill-tests.yml) | Pull requests and pushes to `main` that change `skills/` or the harness | `compare_figure.py` synthetic tests, Paper2Repro self-test (`check_results.py`, `compare_runs.py`, `session_ledger.py`, `check_package.py`), Paper2Fossil self-test (offline), a full `check_package.py` run on the package template, Paper2Revise finding rules and review loop (fake agent, no API calls), regression scorer and skill blinding, session log |
 | [Review site tests](.github/workflows/review-site-tests.yml) | Pull requests and pushes to `main` that change `review-site/` | The rules of the review page: reading a pasted link, value matching, table shape, cause grouping, file sorting, escaping |
 | [Skill regression](.github/workflows/skill-regression.yml) | Weekly, manual dispatch, or pull requests with the `skill-regression` label | An unattended Claude Code run reproduces Fig. 2 and Table 1 of PMC4081639 with the worked example withheld, then scores the result |
 
