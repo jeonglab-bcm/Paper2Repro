@@ -35,6 +35,14 @@ jobs:
       - name: Paper2Fossil self-test (identifier guard, candidate search, duplicate check, issue rendering)
         run: python3 skills/paper2agent/paper2fossil/scripts/test_paper2fossil.py
 
+      - name: Paper2Revise tests (finding rules, review loop with a fake agent)
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@example.com
+          python3 skills/paper2agent/paper2revise/scripts/test_findings.py
+          cd skills/paper2agent/paper2revise/scripts
+          uv run --no-project --with-requirements ../assets/requirements.txt python test_review_pr.py
+
       - name: Package check on the template (wheel, fresh install, tests, tutorial rerun)
         run: python3 skills/paper2agent/paper2repro/scripts/check_package.py skills/paper2agent/paper2repro/assets/package-template
 
