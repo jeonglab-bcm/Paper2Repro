@@ -39,6 +39,16 @@ TOKEN_KEYS = ("input", "cache_creation", "cache_read", "output", "thinking")
 EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])(?!git@)[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 HOME = re.compile(r"(?:/Users/|/home/|[A-Za-z]:\\{1,2}Users\\{1,2})(?!Shared\b)[A-Za-z0-9._-]+")
 PERSONAL = []  # names and handles of the people in the session, filled in main()
+# User rows that Claude Code writes itself, or that echo a shell command: not prompts.
+NOT_PROMPT = ("<local-command-", "<command-stdout>", "<task-notification>", "<bash-input>", "<bash-stdout>",
+              "<bash-stderr>", "[Request interrupted")
+# Slash commands that manage the session rather than ask for work; /paper2repro and other skills still count.
+SESSION_COMMANDS = {
+    "add-dir", "agents", "clear", "compact", "config", "context", "cost", "doctor", "effort", "exit", "export",
+    "fast", "help", "hooks", "ide", "login", "logout", "mcp", "memory", "model", "permissions", "release-notes",
+    "resume", "rewind", "status", "statusline", "tasks", "theme", "usage", "vim",
+}
+COMMAND_NAME = re.compile(r"<command-name>/?([^<\s]+)</command-name>|^/([\w-]+)\s*$")
 
 
 def mask(text):
@@ -130,15 +140,29 @@ def text_of(content):
     return "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
 
 
-def is_human(row):
-    """A prompt typed by the person: not a tool result, not injected context."""
+def user_text(row):
+    """The text of a plain user row, or None for tool results, injected context and other row types."""
     if row.get("type") != "user" or row.get("isMeta") or row.get("isCompactSummary") or row.get("isSidechain"):
-        return False
+        return None
     content = row.get("message", {}).get("content")
     if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+        return None
+    return text_of(content).strip()
+
+
+def is_notification(row):
+    """A notification Claude Code delivers as a user row: a background task, a monitor, GitHub activity."""
+    return (user_text(row) or "").startswith("<task-notification>")
+
+
+def is_human(row):
+    """A prompt typed by the person: not a tool result, injected context, notification, shell echo
+    or session command such as /model or /compact."""
+    text = user_text(row)
+    if not text or text.startswith(NOT_PROMPT):
         return False
-    text = text_of(content).strip()
-    return bool(text) and not text.startswith(("<local-command-", "<command-stdout>"))
+    command = COMMAND_NAME.search(text)
+    return not (command and (command.group(1) or command.group(2)) in SESSION_COMMANDS)
 
 
 def parse(rows):
@@ -258,6 +282,7 @@ def main():
         "models": sorted(models),
         "human_prompts": len(prompts),
         "mid_turn_prompts": sum(1 for e in prompts if e.get("mid_turn")),
+        "system_notifications": sum(1 for r in rows if is_notification(r)),
         "assistant_responses": len(usage),
         "tool_calls": sum(tools.values()),
         "tool_calls_by_name": dict(sorted(tools.items(), key=lambda kv: -kv[1])),
@@ -288,6 +313,7 @@ def main():
         f"| Wall clock | {ledger['wall_clock_minutes']} min |",
         f"| Models | {', '.join(ledger['models'])} |",
         f"| Human prompts | {ledger['human_prompts']} ({ledger['mid_turn_prompts']} sent mid-turn) |",
+        f"| System notifications (not prompts) | {ledger['system_notifications']} |",
         f"| Assistant responses (API calls) | {ledger['assistant_responses']} + {ledger['subagents']['assistant_responses']} in subagents |",
         f"| Tool calls | {ledger['tool_calls']} + {ledger['subagents']['tool_calls']} in subagents |",
         f"| Tokens: input / cache write / cache read / output | {t['input']:,} / {t['cache_creation']:,} / {t['cache_read']:,} / {t['output']:,} |",

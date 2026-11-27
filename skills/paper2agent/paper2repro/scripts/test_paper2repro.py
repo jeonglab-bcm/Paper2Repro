@@ -292,12 +292,28 @@ def main():
             {"type": "user", "timestamp": "2026-01-01T00:00:07Z", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "x"}]}},
             {"type": "attachment", "timestamp": "2026-01-01T00:00:08Z", "attachment": {"type": "queued_command", "prompt": "also add a json", "origin": {"kind": "human"}}},
             {"type": "user", "timestamp": "2026-01-01T00:00:09Z", "isMeta": True, "message": {"role": "user", "content": [{"type": "text", "text": "skill text"}]}},
+            # Rows Claude Code writes as the user that nobody typed (fossil#140): not prompts.
+            {"type": "user", "timestamp": "2026-01-01T00:01:00Z", "message": {"role": "user", "content":
+                "<task-notification> <task-type>queued-remote-notifications</task-type> <status>pending</status> <summary>1 unread notification (GitHub activity)</summary></task-notification>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:02:00Z", "message": {"role": "user", "content":
+                "<task-notification> <task-id>b1</task-id> <summary>Monitor event: \"CI checks on PR #1\"</summary></task-notification>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:03:00Z", "message": {"role": "user", "content": "<bash-input>git pull</bash-input>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:03:01Z", "message": {"role": "user", "content": "<bash-stdout>Already up to date.</bash-stdout><bash-stderr></bash-stderr>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:04:00Z", "message": {"role": "user", "content":
+                "<command-name>/model</command-name> <command-message>model</command-message> <command-args>(model)</command-args>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:05:00Z", "message": {"role": "user", "content":
+                "<command-name>/compact</command-name> <command-message>compact</command-message> <command-args></command-args>"}},
+            {"type": "user", "timestamp": "2026-01-01T00:05:30Z", "message": {"role": "user", "content": "/compact"}},
+            {"type": "user", "timestamp": "2026-01-01T00:06:00Z", "message": {"role": "user", "content": "[Request interrupted by user for tool use]"}},
+            # A skill invoked as a slash command is a typed prompt and still counts.
+            {"type": "user", "timestamp": "2026-01-01T00:07:00Z", "message": {"role": "user", "content":
+                "<command-message>paper2repro</command-message> <command-name>/paper2repro</command-name> <command-args>Reproduce PMC2</command-args>"}},
         ]
         tr = os.path.join(tmp, "s1.jsonl")
         open(tr, "w").write("\n".join(json.dumps(r) for r in rows))
         rc, out = run("session_ledger.py", "--transcript", tr, "--out", os.path.join(tmp, "ledger"))
         led = json.load(open(os.path.join(tmp, "ledger", "ledger.json"))) if rc == 0 else {}
-        want = {"human_prompts": 2, "mid_turn_prompts": 1, "assistant_responses": 1, "tool_calls": 1}
+        want = {"human_prompts": 3, "mid_turn_prompts": 1, "system_notifications": 2, "assistant_responses": 1, "tool_calls": 1}
         for k, v in want.items():
             if led.get(k) != v:
                 failures.append(f"session_ledger.py {k}: {led.get(k)}, expected {v} ({out[:200]})")
